@@ -1,1 +1,7 @@
 project_id = "hogfrzylgljrqyhngjqx"
+
+[functions.admin-actions]
+verify_jwt = false
+
+[functions.ingest-lead]
+verify_jwt = false

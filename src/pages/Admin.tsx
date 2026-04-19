@@ -122,7 +122,7 @@ export default function Admin() {
   };
 
   return (
-    <DashboardLayout>
+    <DashboardLayout title="Administração">
       <div className="space-y-6">
         <div className="flex items-center justify-between rounded-xl border-2 border-primary/40 bg-primary/5 p-4">
           <div className="flex items-center gap-3">
