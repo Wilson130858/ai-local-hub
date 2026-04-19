@@ -75,9 +75,24 @@ Deno.serve(async (req) => {
       const { user_id } = body;
       if (!user_id) return json({ error: "user_id required" }, 400);
       if (user_id === callerId) return json({ error: "cannot delete yourself" }, 400);
+
+      // Limpa referências que bloqueiam o delete (FKs NO ACTION em profiles)
+      await admin.from("audit_logs").delete().or(`admin_id.eq.${user_id},target_user_id.eq.${user_id}`);
+      await admin.from("notifications").delete().or(`target_user_id.eq.${user_id},created_by.eq.${user_id}`);
+      await admin.from("credit_vouchers").update({ created_by: callerId }).eq("created_by", user_id);
+      await admin.from("credit_vouchers").update({ used_by: null }).eq("used_by", user_id);
+      await admin.from("voucher_redemptions").delete().eq("user_id", user_id);
+      await admin.from("leads").delete().in("tenant_id",
+        (await admin.from("tenants").select("id").eq("owner_id", user_id)).data?.map((t: { id: string }) => t.id) ?? []
+      );
+      await admin.from("tenants").delete().eq("owner_id", user_id);
+      await admin.from("user_roles").delete().eq("user_id", user_id);
+      await admin.from("profiles").delete().eq("id", user_id);
+
       const { error } = await admin.auth.admin.deleteUser(user_id);
       if (error) throw error;
-      await audit("delete_user", user_id);
+      // Audit sem target_user_id (já deletado), guarda no details
+      await audit("delete_user", null, { deleted_user_id: user_id });
       return json({ success: true });
     }
 
