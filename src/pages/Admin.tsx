@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Shield, Loader2, Plus, Send, KeyRound, Copy, Trash2 } from "lucide-react";
+import { Shield, Loader2, Plus, Send, KeyRound, Copy, Check, X, Trash2, UserPlus } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -10,15 +10,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { formatCredits, parseReaisToCents } from "@/lib/utils";
 
+type ProfileStatus = "pending" | "approved" | "rejected";
 type Profile = {
   id: string;
   full_name: string | null;
-  category: "barbearia" | "clinica" | "petshop" | null;
+  category: string | null;
   credits: number;
+  status: ProfileStatus;
   created_at: string;
 };
 
@@ -27,6 +33,8 @@ type Voucher = {
   code: string;
   value: number;
   is_used: boolean;
+  max_uses: number | null;
+  uses_count: number;
   created_at: string;
 };
 
@@ -35,90 +43,123 @@ export default function Admin() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
 
   // voucher form
-  const [voucherValue, setVoucherValue] = useState("100");
+  const [voucherValue, setVoucherValue] = useState("100,00");
   const [voucherQty, setVoucherQty] = useState("1");
+  const [limitUses, setLimitUses] = useState(false);
+  const [maxUses, setMaxUses] = useState("1");
 
   // notification form
   const [notifTarget, setNotifTarget] = useState<string>("all");
   const [notifMsg, setNotifMsg] = useState("");
   const [notifType, setNotifType] = useState<"system" | "alert">("system");
 
+  // create user dialog
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newName, setNewName] = useState("");
+
   const loadData = async () => {
     setLoading(true);
     const [{ data: pData }, { data: vData }] = await Promise.all([
-      supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+      supabase.from("profiles").select("id, full_name, category, credits, status, created_at").order("created_at", { ascending: false }),
       supabase.from("credit_vouchers").select("*").order("created_at", { ascending: false }).limit(50),
     ]);
-    setProfiles(pData ?? []);
-    setVouchers(vData ?? []);
+    setProfiles((pData ?? []) as Profile[]);
+    setVouchers((vData ?? []) as Voucher[]);
     setLoading(false);
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  const updateCategory = async (userId: string, category: Profile["category"]) => {
-    const { error } = await supabase.from("profiles").update({ category }).eq("id", userId);
-    if (error) return toast.error(error.message);
-    await supabase.from("audit_logs").insert({
-      admin_id: user!.id,
-      action: "update_category",
-      target_user_id: userId,
-      details: { category },
-    });
-    toast.success("Categoria atualizada");
-    loadData();
+  const callAdmin = async (action: string, payload: Record<string, unknown> = {}) => {
+    const { data, error } = await supabase.functions.invoke("admin-actions", { body: { action, ...payload } });
+    if (error) {
+      toast.error(error.message);
+      return null;
+    }
+    if (data && (data as { error?: string }).error) {
+      toast.error((data as { error: string }).error);
+      return null;
+    }
+    return data;
   };
 
-  const resetPassword = async (email: string) => {
-    const { error } = await supabase.functions.invoke("admin-actions", {
-      body: { action: "reset_password", email },
-    });
+  const updateCategory = async (userId: string, category: string) => {
+    const { error } = await supabase.from("profiles").update({ category: category || null } as never).eq("id", userId);
     if (error) return toast.error(error.message);
-    toast.success(`Email de redefinição enviado para ${email}`);
+    await supabase.from("audit_logs").insert({ admin_id: user!.id, action: "update_category", target_user_id: userId, details: { category } });
+    toast.success("Categoria atualizada");
+  };
+
+  const approveUser = async (userId: string) => {
+    const r = await callAdmin("approve_user", { user_id: userId });
+    if (r) { toast.success("Usuário aprovado"); loadData(); }
+  };
+  const rejectUser = async (userId: string) => {
+    const r = await callAdmin("reject_user", { user_id: userId });
+    if (r) { toast.success("Usuário rejeitado"); loadData(); }
+  };
+  const deleteUser = async (userId: string) => {
+    const r = await callAdmin("delete_user", { user_id: userId });
+    if (r) { toast.success("Usuário excluído"); loadData(); }
+  };
+  const resetPassword = async (email: string) => {
+    const r = await callAdmin("reset_password", { email });
+    if (r) toast.success(`Email de redefinição enviado para ${email}`);
+  };
+  const createUser = async () => {
+    if (!newEmail || !newPassword) return toast.error("Email e senha obrigatórios");
+    const r = await callAdmin("create_user", { email: newEmail, password: newPassword, full_name: newName });
+    if (r) {
+      toast.success("Usuário criado e aprovado");
+      setCreateOpen(false);
+      setNewEmail(""); setNewPassword(""); setNewName("");
+      loadData();
+    }
   };
 
   const generateVouchers = async () => {
-    const value = parseInt(voucherValue);
+    const cents = parseReaisToCents(voucherValue);
     const qty = parseInt(voucherQty);
-    if (!value || !qty || qty > 50) return toast.error("Valor inválido (máx 50 por vez)");
+    if (!cents || cents <= 0 || !qty || qty > 50) return toast.error("Valor ou quantidade inválidos (máx 50)");
+    let max: number | null = null;
+    if (limitUses) {
+      max = parseInt(maxUses);
+      if (!max || max < 1) return toast.error("Quantidade de usos inválida");
+    }
 
-    const codes = Array.from({ length: qty }, () =>
-      Math.random().toString(36).substring(2, 10).toUpperCase()
-    );
-    const rows = codes.map((code) => ({ code, value, created_by: user!.id }));
+    const codes = Array.from({ length: qty }, () => Math.random().toString(36).substring(2, 10).toUpperCase());
+    const rows = codes.map((code) => ({ code, value: cents, max_uses: max, created_by: user!.id }));
     const { error } = await supabase.from("credit_vouchers").insert(rows);
     if (error) return toast.error(error.message);
-    await supabase.from("audit_logs").insert({
-      admin_id: user!.id,
-      action: "generate_vouchers",
-      details: { quantity: qty, value },
-    });
-    toast.success(`${qty} vouchers gerados`);
+    await supabase.from("audit_logs").insert({ admin_id: user!.id, action: "generate_vouchers", details: { quantity: qty, value_cents: cents, max_uses: max } });
+    toast.success(`${qty} voucher(s) gerados`);
     loadData();
   };
 
   const sendNotification = async () => {
     if (!notifMsg.trim()) return toast.error("Mensagem vazia");
     const targets = notifTarget === "all" ? profiles.map((p) => p.id) : [notifTarget];
-    const rows = targets.map((tid) => ({
-      target_user_id: tid,
-      message: notifMsg,
-      type: notifType,
-      created_by: user!.id,
-    }));
+    const rows = targets.map((tid) => ({ target_user_id: tid, message: notifMsg, type: notifType, created_by: user!.id }));
     const { error } = await supabase.from("notifications").insert(rows);
     if (error) return toast.error(error.message);
     toast.success(`Notificação enviada para ${targets.length} usuário(s)`);
     setNotifMsg("");
   };
 
-  const copyCode = (code: string) => {
-    navigator.clipboard.writeText(code);
-    toast.success("Código copiado");
+  const copyCode = (code: string) => { navigator.clipboard.writeText(code); toast.success("Código copiado"); };
+
+  const filtered = profiles.filter((p) => filter === "all" ? true : p.status === filter);
+  const pendingCount = profiles.filter((p) => p.status === "pending").length;
+
+  const statusBadge = (s: ProfileStatus) => {
+    if (s === "approved") return <Badge variant="outline" className="border-success/30 bg-success/10 text-success">Aprovado</Badge>;
+    if (s === "pending") return <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">Pendente</Badge>;
+    return <Badge variant="outline" className="border-destructive/30 bg-destructive/10 text-destructive">Rejeitado</Badge>;
   };
 
   return (
@@ -139,7 +180,10 @@ export default function Admin() {
 
         <Tabs defaultValue="users">
           <TabsList>
-            <TabsTrigger value="users">Usuários</TabsTrigger>
+            <TabsTrigger value="users">
+              Usuários
+              {pendingCount > 0 && <Badge variant="destructive" className="ml-2 h-5 px-1.5 text-[10px]">{pendingCount}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="vouchers">Créditos</TabsTrigger>
             <TabsTrigger value="notifications">Notificações</TabsTrigger>
           </TabsList>
@@ -147,50 +191,121 @@ export default function Admin() {
           {/* USERS */}
           <TabsContent value="users">
             <Card>
-              <CardHeader>
-                <CardTitle>Gestão de Usuários</CardTitle>
-                <CardDescription>Altere categorias e gerencie senhas</CardDescription>
+              <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+                <div>
+                  <CardTitle>Gestão de Usuários</CardTitle>
+                  <CardDescription>Aprove cadastros, edite categorias e gerencie senhas</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
+                    <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="pending">Pendentes</SelectItem>
+                      <SelectItem value="approved">Aprovados</SelectItem>
+                      <SelectItem value="rejected">Rejeitados</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm"><UserPlus className="mr-1 h-4 w-4" /> Novo</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Criar usuário</DialogTitle>
+                        <DialogDescription>O usuário será criado já aprovado.</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-3">
+                        <div className="space-y-2"><Label>Nome</Label><Input value={newName} onChange={(e) => setNewName(e.target.value)} /></div>
+                        <div className="space-y-2"><Label>Email</Label><Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} /></div>
+                        <div className="space-y-2"><Label>Senha temporária</Label><Input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
+                        <Button onClick={createUser}>Criar</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </CardHeader>
               <CardContent>
                 {loading ? (
                   <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></div>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Categoria</TableHead>
-                        <TableHead>Créditos</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {profiles.map((p) => (
-                        <TableRow key={p.id}>
-                          <TableCell className="font-medium">{p.full_name ?? "—"}</TableCell>
-                          <TableCell>
-                            <Select value={p.category ?? ""} onValueChange={(v) => updateCategory(p.id, v as Profile["category"])}>
-                              <SelectTrigger className="h-8 w-36"><SelectValue placeholder="—" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="barbearia">Barbearia</SelectItem>
-                                <SelectItem value="clinica">Clínica</SelectItem>
-                                <SelectItem value="petshop">Petshop</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>{p.credits}</TableCell>
-                          <TableCell className="text-right">
-                            <Button size="sm" variant="ghost" onClick={() => {
-                              const email = prompt("Email do usuário para redefinir senha:");
-                              if (email) resetPassword(email);
-                            }}>
-                              <KeyRound className="mr-1 h-3 w-3" /> Reset
-                            </Button>
-                          </TableCell>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Categoria</TableHead>
+                          <TableHead>Créditos</TableHead>
+                          <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {filtered.map((p) => (
+                          <TableRow key={p.id}>
+                            <TableCell className="font-medium">{p.full_name ?? "—"}</TableCell>
+                            <TableCell>{statusBadge(p.status)}</TableCell>
+                            <TableCell>
+                              <Input
+                                defaultValue={p.category ?? ""}
+                                placeholder="Ex: Barbearia"
+                                className="h-8 w-40"
+                                onBlur={(e) => {
+                                  if ((e.target.value || "") !== (p.category ?? "")) updateCategory(p.id, e.target.value);
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell className="font-mono">{formatCredits(p.credits)}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                {p.status === "pending" && (
+                                  <>
+                                    <Button size="sm" variant="ghost" className="text-success" onClick={() => approveUser(p.id)} title="Aprovar">
+                                      <Check className="h-4 w-4" />
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => rejectUser(p.id)} title="Rejeitar">
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
+                                <Button size="sm" variant="ghost" onClick={() => {
+                                  const email = prompt("Email do usuário para redefinir senha:");
+                                  if (email) resetPassword(email);
+                                }} title="Reset senha">
+                                  <KeyRound className="h-4 w-4" />
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button size="sm" variant="ghost" className="text-destructive" title="Excluir">
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Excluir usuário?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Esta ação remove permanentemente {p.full_name ?? "este usuário"} e todos os seus dados.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => deleteUser(p.id)}>Excluir</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {filtered.length === 0 && (
+                          <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">Nenhum usuário</TableCell></TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -202,17 +317,28 @@ export default function Admin() {
               <Card>
                 <CardHeader>
                   <CardTitle>Gerar Vouchers</CardTitle>
-                  <CardDescription>Códigos aleatórios resgatáveis pelos usuários</CardDescription>
+                  <CardDescription>Códigos resgatáveis pelos clientes (em R$)</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Valor (créditos)</Label>
-                    <Input type="number" value={voucherValue} onChange={(e) => setVoucherValue(e.target.value)} />
+                    <Label>Valor (R$)</Label>
+                    <Input type="text" inputMode="decimal" value={voucherValue} onChange={(e) => setVoucherValue(e.target.value)} placeholder="100,00" />
                   </div>
                   <div className="space-y-2">
-                    <Label>Quantidade</Label>
+                    <Label>Quantidade de códigos</Label>
                     <Input type="number" value={voucherQty} onChange={(e) => setVoucherQty(e.target.value)} max={50} />
                   </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <Checkbox id="limit" checked={limitUses} onCheckedChange={(v) => setLimitUses(!!v)} />
+                    <Label htmlFor="limit" className="text-sm font-normal cursor-pointer">Limitar uso</Label>
+                  </div>
+                  {limitUses && (
+                    <div className="space-y-2">
+                      <Label>Quantidade máxima de usos por código</Label>
+                      <Input type="number" min={1} value={maxUses} onChange={(e) => setMaxUses(e.target.value)} />
+                      <p className="text-xs text-muted-foreground">Cada usuário só pode resgatar o mesmo código uma vez.</p>
+                    </div>
+                  )}
                   <Button onClick={generateVouchers} className="w-full">
                     <Plus className="mr-2 h-4 w-4" /> Gerar
                   </Button>
@@ -224,20 +350,23 @@ export default function Admin() {
                   <CardTitle>Últimos Vouchers</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="max-h-80 space-y-2 overflow-auto">
+                  <div className="max-h-96 space-y-2 overflow-auto">
                     {vouchers.map((v) => (
-                      <div key={v.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
-                        <div className="flex items-center gap-2">
+                      <div key={v.id} className="flex items-center justify-between rounded-md border border-border p-2 text-sm">
+                        <div className="flex flex-wrap items-center gap-2">
                           <code className="font-mono">{v.code}</code>
-                          <Badge variant="outline">{v.value}</Badge>
-                          {v.is_used && <Badge variant="secondary">Usado</Badge>}
+                          <Badge variant="outline">{formatCredits(v.value)}</Badge>
+                          <Badge variant="secondary" className="text-[10px]">
+                            {v.uses_count}/{v.max_uses ?? "∞"}
+                          </Badge>
+                          {v.is_used && <Badge variant="outline" className="text-[10px]">Esgotado</Badge>}
                         </div>
                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => copyCode(v.code)}>
                           <Copy className="h-3 w-3" />
                         </Button>
                       </div>
                     ))}
-                    {vouchers.length === 0 && <p className="text-center text-sm text-muted-foreground">Nenhum voucher</p>}
+                    {vouchers.length === 0 && <p className="text-center text-sm text-muted-foreground py-4">Nenhum voucher</p>}
                   </div>
                 </CardContent>
               </Card>
