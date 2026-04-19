@@ -63,8 +63,10 @@ export type Database = {
           created_by: string
           id: string
           is_used: boolean
+          max_uses: number | null
           used_at: string | null
           used_by: string | null
+          uses_count: number
           value: number
         }
         Insert: {
@@ -73,8 +75,10 @@ export type Database = {
           created_by: string
           id?: string
           is_used?: boolean
+          max_uses?: number | null
           used_at?: string | null
           used_by?: string | null
+          uses_count?: number
           value: number
         }
         Update: {
@@ -83,8 +87,10 @@ export type Database = {
           created_by?: string
           id?: string
           is_used?: boolean
+          max_uses?: number | null
           used_at?: string | null
           used_by?: string | null
+          uses_count?: number
           value?: number
         }
         Relationships: [
@@ -193,29 +199,32 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
-          category: Database["public"]["Enums"]["business_category"] | null
+          category: string | null
           created_at: string
           credits: number
           full_name: string | null
           id: string
+          status: Database["public"]["Enums"]["profile_status"]
           updated_at: string
         }
         Insert: {
           avatar_url?: string | null
-          category?: Database["public"]["Enums"]["business_category"] | null
+          category?: string | null
           created_at?: string
           credits?: number
           full_name?: string | null
           id: string
+          status?: Database["public"]["Enums"]["profile_status"]
           updated_at?: string
         }
         Update: {
           avatar_url?: string | null
-          category?: Database["public"]["Enums"]["business_category"] | null
+          category?: string | null
           created_at?: string
           credits?: number
           full_name?: string | null
           id?: string
+          status?: Database["public"]["Enums"]["profile_status"]
           updated_at?: string
         }
         Relationships: []
@@ -279,6 +288,35 @@ export type Database = {
         }
         Relationships: []
       }
+      voucher_redemptions: {
+        Row: {
+          redeemed_at: string
+          user_id: string
+          value_at_redemption: number
+          voucher_id: string
+        }
+        Insert: {
+          redeemed_at?: string
+          user_id: string
+          value_at_redemption: number
+          voucher_id: string
+        }
+        Update: {
+          redeemed_at?: string
+          user_id?: string
+          value_at_redemption?: number
+          voucher_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voucher_redemptions_voucher_id_fkey"
+            columns: ["voucher_id"]
+            isOneToOne: false
+            referencedRelation: "credit_vouchers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -299,6 +337,7 @@ export type Database = {
       business_category: "barbearia" | "clinica" | "petshop"
       lead_status: "pendente" | "agendado" | "cancelado"
       notification_type: "system" | "alert"
+      profile_status: "pending" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -430,6 +469,7 @@ export const Constants = {
       business_category: ["barbearia", "clinica", "petshop"],
       lead_status: ["pendente", "agendado", "cancelado"],
       notification_type: ["system", "alert"],
+      profile_status: ["pending", "approved", "rejected"],
     },
   },
 } as const

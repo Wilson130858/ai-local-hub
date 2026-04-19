@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bot, Loader2 } from "lucide-react";
+import { Bot, Loader2, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [signupSuccess, setSignupSuccess] = useState(false);
 
   useEffect(() => {
     if (!authLoading && user) navigate("/", { replace: true });
@@ -46,14 +47,39 @@ export default function Auth() {
         data: { full_name: fullName },
       },
     });
+    if (!error) {
+      // Desloga imediatamente — o usuário precisa de aprovação antes de acessar
+      await supabase.auth.signOut();
+    }
     setLoading(false);
     if (error) {
       toast.error(error.message.includes("already") ? "Este email já está cadastrado" : error.message);
     } else {
-      toast.success("Conta criada com sucesso!");
-      navigate("/", { replace: true });
+      setSignupSuccess(true);
     }
   };
+
+  if (signupSuccess) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="items-center text-center">
+            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-success/10 text-success">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <CardTitle>Cadastro enviado!</CardTitle>
+            <CardDescription>
+              Sua conta foi criada e está aguardando aprovação de um administrador.
+              Você será notificado por e-mail quando o acesso for liberado.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full" onClick={() => { setSignupSuccess(false); }}>Voltar</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-4">
@@ -109,6 +135,9 @@ export default function Auth() {
                     <Label htmlFor="signup-password">Senha</Label>
                     <Input id="signup-password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Após o cadastro, sua conta passará por aprovação de um administrador.
+                  </p>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Criar conta
