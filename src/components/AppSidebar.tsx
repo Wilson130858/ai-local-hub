@@ -1,4 +1,4 @@
-import { Home, Users, Settings, Bot } from "lucide-react";
+import { Home, Users, Settings, Bot, Shield } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -12,8 +12,9 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useAuth } from "@/hooks/useAuth";
 
-const items = [
+const baseItems = [
   { title: "Home", url: "/", icon: Home },
   { title: "Leads", url: "/leads", icon: Users },
   { title: "Configurações", url: "/configuracoes", icon: Settings },
@@ -23,6 +24,8 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const { isAdmin } = useAuth();
+  const items = isAdmin ? [...baseItems, { title: "Admin", url: "/admin", icon: Shield }] : baseItems;
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
