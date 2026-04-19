@@ -1,10 +1,10 @@
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { Bell, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { businessName } from "@/lib/mock-data";
+import { NotificationsPopover } from "@/components/NotificationsPopover";
 
 export function DashboardLayout({ children, title }: { children: React.ReactNode; title: string }) {
   return (
@@ -23,9 +23,7 @@ export function DashboardLayout({ children, title }: { children: React.ReactNode
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input placeholder="Buscar..." className="h-9 w-64 rounded-full border-border bg-secondary pl-9" />
               </div>
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <Bell className="h-4 w-4" />
-              </Button>
+              <NotificationsPopover />
               <Avatar className="h-9 w-9 border border-border">
                 <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">VB</AvatarFallback>
               </Avatar>
