@@ -577,6 +577,45 @@ export default function Admin() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* SETTINGS */}
+          <TabsContent value="settings">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <SettingsIcon className="h-4 w-4" /> Configurações de Faturamento
+                </CardTitle>
+                <CardDescription>Definições globais aplicadas a todos os clientes</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 max-w-md">
+                <div className="space-y-2">
+                  <Label>Mensalidade base padrão (R$)</Label>
+                  <Input
+                    inputMode="decimal"
+                    value={baseAmountInput}
+                    onChange={(e) => setBaseAmountInput(e.target.value)}
+                    placeholder="99,00"
+                  />
+                  <p className="text-xs text-muted-foreground">Valor cobrado mensalmente como base da fatura.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Dia de fechamento da fatura</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={28}
+                    value={closingDayInput}
+                    onChange={(e) => setClosingDayInput(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Dia do mês (1-28) em que a próxima fatura vence.</p>
+                </div>
+                <Button onClick={saveSettings} disabled={savingSettings}>
+                  {savingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Salvar
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
 
         <VoucherDialog
