@@ -382,23 +382,30 @@ export default function Admin() {
               <Card>
                 <CardHeader>
                   <CardTitle>Últimos Vouchers</CardTitle>
+                  <CardDescription>Clique em um voucher para ver detalhes e histórico</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="max-h-96 space-y-2 overflow-auto">
                     {vouchers.map((v) => (
-                      <div key={v.id} className="flex items-center justify-between rounded-md border border-border p-2 text-sm">
+                      <button
+                        key={v.id}
+                        onClick={() => openVoucher(v)}
+                        className="flex w-full items-center justify-between gap-2 rounded-md border border-border p-2 text-left text-sm transition-colors hover:bg-muted/50"
+                      >
                         <div className="flex flex-wrap items-center gap-2">
                           <code className="font-mono">{v.code}</code>
                           <Badge variant="outline">{formatCredits(v.value)}</Badge>
                           <Badge variant="secondary" className="text-[10px]">
                             {v.uses_count}/{v.max_uses ?? "∞"}
                           </Badge>
+                          {v.is_paused && (
+                            <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning text-[10px]">
+                              <Pause className="mr-1 h-2.5 w-2.5" /> Pausado
+                            </Badge>
+                          )}
                           {v.is_used && <Badge variant="outline" className="text-[10px]">Esgotado</Badge>}
                         </div>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => copyCode(v.code)}>
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                      </div>
+                      </button>
                     ))}
                     {vouchers.length === 0 && <p className="text-center text-sm text-muted-foreground py-4">Nenhum voucher</p>}
                   </div>
