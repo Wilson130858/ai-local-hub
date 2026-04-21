@@ -41,6 +41,41 @@ type Voucher = {
   created_at: string;
 };
 
+function CreditsAdjustPopover({ onApply }: { onApply: (delta: string, sign: 1 | -1, reason: string) => void | Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("10,00");
+  const [reason, setReason] = useState("");
+  const submit = async (sign: 1 | -1) => {
+    await onApply(value, sign, reason);
+    setOpen(false);
+    setValue("10,00");
+    setReason("");
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button size="sm" variant="ghost" title="Ajustar créditos">
+          <Coins className="h-4 w-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 space-y-3" align="end">
+        <div className="space-y-1">
+          <Label className="text-xs">Valor (R$)</Label>
+          <Input value={value} onChange={(e) => setValue(e.target.value)} inputMode="decimal" className="h-8" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Motivo (opcional)</Label>
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} className="h-8" placeholder="Ex: bônus de boas-vindas" />
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" className="flex-1" onClick={() => submit(1)}>Adicionar</Button>
+          <Button size="sm" variant="outline" className="flex-1" onClick={() => submit(-1)}>Remover</Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export default function Admin() {
   const { user } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
