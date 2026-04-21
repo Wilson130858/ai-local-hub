@@ -118,6 +118,25 @@ export default function Admin() {
     const r = await callAdmin("reset_password", { email });
     if (r) toast.success(`Email de redefinição enviado para ${email}`);
   };
+  const impersonate = async (userId: string) => {
+    const r = await callAdmin("impersonate_user", { user_id: userId });
+    const link = (r as { action_link?: string } | null)?.action_link;
+    if (link) {
+      window.open(link, "_blank", "noopener,noreferrer");
+      toast.success("Abrindo conta em nova aba", {
+        description: "Dica: use uma janela anônima para preservar sua sessão admin.",
+      });
+    }
+  };
+  const adjustCredits = async (userId: string, deltaReais: string, sign: 1 | -1, reason: string) => {
+    const cents = parseReaisToCents(deltaReais);
+    if (!cents || cents <= 0) return toast.error("Valor inválido");
+    const r = await callAdmin("adjust_credits", { user_id: userId, delta: sign * cents, reason });
+    if (r) {
+      toast.success(sign > 0 ? "Créditos adicionados" : "Créditos removidos");
+      loadData();
+    }
+  };
   const createUser = async () => {
     if (!newEmail || !newPassword) return toast.error("Email e senha obrigatórios");
     const r = await callAdmin("create_user", { email: newEmail, password: newPassword, full_name: newName });
