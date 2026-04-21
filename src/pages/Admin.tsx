@@ -360,6 +360,17 @@ export default function Admin() {
                                     </Button>
                                   </>
                                 )}
+                                <CreditsAdjustPopover
+                                  onApply={(v, sign, reason) => adjustCredits(p.id, v, sign, reason)}
+                                />
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => impersonate(p.id)}
+                                  title="Acessar conta"
+                                >
+                                  <LogIn className="h-4 w-4" />
+                                </Button>
                                 <Button size="sm" variant="ghost" onClick={() => {
                                   const email = prompt("Email do usuário para redefinir senha:");
                                   if (email) resetPassword(email);
