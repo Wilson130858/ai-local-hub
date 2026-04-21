@@ -34,6 +34,7 @@ type Voucher = {
   code: string;
   value: number;
   is_used: boolean;
+  is_paused: boolean;
   max_uses: number | null;
   uses_count: number;
   created_at: string;
@@ -53,9 +54,13 @@ export default function Admin() {
   const [maxUses, setMaxUses] = useState("1");
 
   // notification form
-  const [notifTarget, setNotifTarget] = useState<string>("all");
+  const [notifTitle, setNotifTitle] = useState("");
   const [notifMsg, setNotifMsg] = useState("");
-  const [notifType, setNotifType] = useState<"system" | "alert">("system");
+  const [selectedRecipients, setSelectedRecipients] = useState<Set<string>>(new Set());
+
+  // voucher modal
+  const [voucherOpen, setVoucherOpen] = useState(false);
+  const [activeVoucher, setActiveVoucher] = useState<VoucherDialogItem | null>(null);
 
   // create user dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -147,16 +152,40 @@ export default function Admin() {
   };
 
   const sendNotification = async () => {
+    if (!notifTitle.trim()) return toast.error("Título obrigatório");
     if (!notifMsg.trim()) return toast.error("Mensagem vazia");
-    const targets = notifTarget === "all" ? profiles.map((p) => p.id) : [notifTarget];
-    const rows = targets.map((tid) => ({ target_user_id: tid, message: notifMsg, type: notifType, created_by: user!.id }));
+    if (selectedRecipients.size === 0) return toast.error("Selecione ao menos um destinatário");
+    const rows = Array.from(selectedRecipients).map((tid) => ({
+      target_user_id: tid,
+      title: notifTitle,
+      message: notifMsg,
+      created_by: user!.id,
+    }));
     const { error } = await supabase.from("notifications").insert(rows);
     if (error) return toast.error(error.message);
-    toast.success(`Notificação enviada para ${targets.length} usuário(s)`);
+    toast.success(`Notificação enviada para ${rows.length} usuário(s)`);
+    setNotifTitle("");
     setNotifMsg("");
+    setSelectedRecipients(new Set());
   };
 
-  const copyCode = (code: string) => { navigator.clipboard.writeText(code); toast.success("Código copiado"); };
+  const toggleRecipient = (id: string) => {
+    setSelectedRecipients((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleAllRecipients = () => {
+    setSelectedRecipients((prev) =>
+      prev.size === profiles.length ? new Set() : new Set(profiles.map((p) => p.id))
+    );
+  };
+  const openVoucher = (v: Voucher) => {
+    setActiveVoucher(v as VoucherDialogItem);
+    setVoucherOpen(true);
+  };
 
   const filtered = profiles.filter((p) => filter === "all" ? true : p.status === filter);
   const pendingCount = profiles.filter((p) => p.status === "pending").length;
