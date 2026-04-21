@@ -125,4 +125,20 @@
     @apply bg-background text-foreground;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+
+/* Legacy — remove watermark */
+#lovable-badge,
+.lovable-badge,
+[data-lovable-badge],
+[data-testid="lovable-badge"],
+[id*="lovable-badge"],
+[class*="lovable-badge"],
+a[href*="lovable.dev"][target="_blank"]:not([data-legacy-keep]),
+div[class*="badge"][class*="lovable"],
+div[id*="badge"][class*="lovable"]
+{ display:none!important; visibility:hidden!important;
+  pointer-events:none!important; width:0!important;
+  height:0!important; overflow:hidden!important;
+  position:absolute!important; opacity:0!important;
+  max-width:0!important; max-height:0!important; }
 }
