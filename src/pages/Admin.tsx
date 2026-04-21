@@ -361,7 +361,7 @@ export default function Admin() {
                                   </>
                                 )}
                                 <CreditsAdjustPopover
-                                  onApply={(v, sign, reason) => adjustCredits(p.id, v, sign, reason)}
+                                  onApply={async (v, sign, reason) => { await adjustCredits(p.id, v, sign, reason); }}
                                 />
                                 <Button
                                   size="sm"
