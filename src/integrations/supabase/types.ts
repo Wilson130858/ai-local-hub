@@ -62,6 +62,7 @@ export type Database = {
           created_at: string
           created_by: string
           id: string
+          is_paused: boolean
           is_used: boolean
           max_uses: number | null
           used_at: string | null
@@ -74,6 +75,7 @@ export type Database = {
           created_at?: string
           created_by: string
           id?: string
+          is_paused?: boolean
           is_used?: boolean
           max_uses?: number | null
           used_at?: string | null
@@ -86,6 +88,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           id?: string
+          is_paused?: boolean
           is_used?: boolean
           max_uses?: number | null
           used_at?: string | null
@@ -159,6 +162,7 @@ export type Database = {
           is_read: boolean
           message: string
           target_user_id: string
+          title: string
           type: Database["public"]["Enums"]["notification_type"]
         }
         Insert: {
@@ -168,6 +172,7 @@ export type Database = {
           is_read?: boolean
           message: string
           target_user_id: string
+          title?: string
           type?: Database["public"]["Enums"]["notification_type"]
         }
         Update: {
@@ -177,6 +182,7 @@ export type Database = {
           is_read?: boolean
           message?: string
           target_user_id?: string
+          title?: string
           type?: Database["public"]["Enums"]["notification_type"]
         }
         Relationships: [

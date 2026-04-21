@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Shield, Loader2, Plus, Send, KeyRound, Copy, Check, X, Trash2, UserPlus } from "lucide-react";
+import { Shield, Loader2, Plus, Send, KeyRound, Check, X, Trash2, UserPlus, Pause } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { formatCredits, parseReaisToCents } from "@/lib/utils";
+import { VoucherDialog, type VoucherDialogItem } from "@/components/admin/VoucherDialog";
 
 type ProfileStatus = "pending" | "approved" | "rejected";
 type Profile = {
@@ -33,6 +34,7 @@ type Voucher = {
   code: string;
   value: number;
   is_used: boolean;
+  is_paused: boolean;
   max_uses: number | null;
   uses_count: number;
   created_at: string;
@@ -52,9 +54,13 @@ export default function Admin() {
   const [maxUses, setMaxUses] = useState("1");
 
   // notification form
-  const [notifTarget, setNotifTarget] = useState<string>("all");
+  const [notifTitle, setNotifTitle] = useState("");
   const [notifMsg, setNotifMsg] = useState("");
-  const [notifType, setNotifType] = useState<"system" | "alert">("system");
+  const [selectedRecipients, setSelectedRecipients] = useState<Set<string>>(new Set());
+
+  // voucher modal
+  const [voucherOpen, setVoucherOpen] = useState(false);
+  const [activeVoucher, setActiveVoucher] = useState<VoucherDialogItem | null>(null);
 
   // create user dialog
   const [createOpen, setCreateOpen] = useState(false);
@@ -146,16 +152,40 @@ export default function Admin() {
   };
 
   const sendNotification = async () => {
+    if (!notifTitle.trim()) return toast.error("Título obrigatório");
     if (!notifMsg.trim()) return toast.error("Mensagem vazia");
-    const targets = notifTarget === "all" ? profiles.map((p) => p.id) : [notifTarget];
-    const rows = targets.map((tid) => ({ target_user_id: tid, message: notifMsg, type: notifType, created_by: user!.id }));
+    if (selectedRecipients.size === 0) return toast.error("Selecione ao menos um destinatário");
+    const rows = Array.from(selectedRecipients).map((tid) => ({
+      target_user_id: tid,
+      title: notifTitle,
+      message: notifMsg,
+      created_by: user!.id,
+    }));
     const { error } = await supabase.from("notifications").insert(rows);
     if (error) return toast.error(error.message);
-    toast.success(`Notificação enviada para ${targets.length} usuário(s)`);
+    toast.success(`Notificação enviada para ${rows.length} usuário(s)`);
+    setNotifTitle("");
     setNotifMsg("");
+    setSelectedRecipients(new Set());
   };
 
-  const copyCode = (code: string) => { navigator.clipboard.writeText(code); toast.success("Código copiado"); };
+  const toggleRecipient = (id: string) => {
+    setSelectedRecipients((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleAllRecipients = () => {
+    setSelectedRecipients((prev) =>
+      prev.size === profiles.length ? new Set() : new Set(profiles.map((p) => p.id))
+    );
+  };
+  const openVoucher = (v: Voucher) => {
+    setActiveVoucher(v as VoucherDialogItem);
+    setVoucherOpen(true);
+  };
 
   const filtered = profiles.filter((p) => filter === "all" ? true : p.status === filter);
   const pendingCount = profiles.filter((p) => p.status === "pending").length;
@@ -352,23 +382,30 @@ export default function Admin() {
               <Card>
                 <CardHeader>
                   <CardTitle>Últimos Vouchers</CardTitle>
+                  <CardDescription>Clique em um voucher para ver detalhes e histórico</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="max-h-96 space-y-2 overflow-auto">
                     {vouchers.map((v) => (
-                      <div key={v.id} className="flex items-center justify-between rounded-md border border-border p-2 text-sm">
+                      <button
+                        key={v.id}
+                        onClick={() => openVoucher(v)}
+                        className="flex w-full items-center justify-between gap-2 rounded-md border border-border p-2 text-left text-sm transition-colors hover:bg-muted/50"
+                      >
                         <div className="flex flex-wrap items-center gap-2">
                           <code className="font-mono">{v.code}</code>
                           <Badge variant="outline">{formatCredits(v.value)}</Badge>
                           <Badge variant="secondary" className="text-[10px]">
                             {v.uses_count}/{v.max_uses ?? "∞"}
                           </Badge>
+                          {v.is_paused && (
+                            <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning text-[10px]">
+                              <Pause className="mr-1 h-2.5 w-2.5" /> Pausado
+                            </Badge>
+                          )}
                           {v.is_used && <Badge variant="outline" className="text-[10px]">Esgotado</Badge>}
                         </div>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => copyCode(v.code)}>
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                      </div>
+                      </button>
                     ))}
                     {vouchers.length === 0 && <p className="text-center text-sm text-muted-foreground py-4">Nenhum voucher</p>}
                   </div>
@@ -385,41 +422,62 @@ export default function Admin() {
                 <CardDescription>Envie mensagens para um usuário ou em massa</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Destinatário</Label>
-                    <Select value={notifTarget} onValueChange={setNotifTarget}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos os usuários</SelectItem>
-                        {profiles.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>{p.full_name ?? p.id.slice(0, 8)}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Tipo</Label>
-                    <Select value={notifType} onValueChange={(v) => setNotifType(v as "system" | "alert")}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="system">Sistema</SelectItem>
-                        <SelectItem value="alert">Alerta</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label>Título</Label>
+                  <Input value={notifTitle} onChange={(e) => setNotifTitle(e.target.value)} placeholder="Título da notificação" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Mensagem</Label>
+                  <Label>Texto</Label>
                   <Textarea rows={4} value={notifMsg} onChange={(e) => setNotifMsg(e.target.value)} placeholder="Escreva a mensagem..." />
                 </div>
-                <Button onClick={sendNotification}>
+                <div className="space-y-2">
+                  <Label>Destinatários ({selectedRecipients.size}/{profiles.length})</Label>
+                  <div className="rounded-md border border-border">
+                    <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2">
+                      <Checkbox
+                        id="notif-all"
+                        checked={profiles.length > 0 && selectedRecipients.size === profiles.length}
+                        onCheckedChange={toggleAllRecipients}
+                      />
+                      <Label htmlFor="notif-all" className="cursor-pointer text-sm font-medium">
+                        Selecionar todos
+                      </Label>
+                    </div>
+                    <div className="max-h-72 overflow-auto">
+                      {profiles.length === 0 ? (
+                        <p className="px-3 py-6 text-center text-sm text-muted-foreground">Nenhum usuário</p>
+                      ) : (
+                        profiles.map((p) => (
+                          <div key={p.id} className="flex items-center gap-2 border-b border-border/50 px-3 py-2 last:border-b-0">
+                            <Checkbox
+                              id={`notif-${p.id}`}
+                              checked={selectedRecipients.has(p.id)}
+                              onCheckedChange={() => toggleRecipient(p.id)}
+                            />
+                            <Label htmlFor={`notif-${p.id}`} className="flex-1 cursor-pointer text-sm font-normal">
+                              {p.full_name ?? p.id.slice(0, 8)}
+                            </Label>
+                            {statusBadge(p.status)}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <Button onClick={sendNotification} disabled={selectedRecipients.size === 0}>
                   <Send className="mr-2 h-4 w-4" /> Enviar
                 </Button>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
+
+        <VoucherDialog
+          voucher={activeVoucher}
+          open={voucherOpen}
+          onOpenChange={setVoucherOpen}
+          onChanged={loadData}
+        />
       </div>
     </DashboardLayout>
   );

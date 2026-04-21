@@ -11,6 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 type Notification = {
   id: string;
+  title: string;
   message: string;
   type: "system" | "alert";
   is_read: boolean;
@@ -29,7 +30,7 @@ export function NotificationsPopover() {
     if (!user) return;
     const { data } = await supabase
       .from("notifications")
-      .select("id, message, type, is_read, created_at")
+      .select("id, title, message, type, is_read, created_at")
       .eq("target_user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -85,13 +86,11 @@ export function NotificationsPopover() {
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <div className="flex-1">
+                {selected.title && <p className="text-sm font-semibold leading-tight">{selected.title}</p>}
                 <p className="text-xs text-muted-foreground">
                   {formatDistanceToNow(new Date(selected.created_at), { addSuffix: true, locale: ptBR })}
                 </p>
               </div>
-              <Badge variant={selected.type === "alert" ? "destructive" : "secondary"} className="text-[10px]">
-                {selected.type === "alert" ? "Alerta" : "Sistema"}
-              </Badge>
             </div>
             <div className="p-4 text-sm leading-relaxed whitespace-pre-wrap">{selected.message}</div>
           </div>
@@ -129,8 +128,11 @@ export function NotificationsPopover() {
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className={`truncate text-sm ${n.is_read ? "text-muted-foreground" : "font-medium"}`}>
-                            {n.message}
+                            {n.title || n.message}
                           </p>
+                          {n.title && (
+                            <p className="truncate text-xs text-muted-foreground">{n.message}</p>
+                          )}
                           <p className="mt-0.5 text-[11px] text-muted-foreground">
                             {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: ptBR })}
                           </p>
