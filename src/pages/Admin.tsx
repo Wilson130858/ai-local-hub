@@ -422,41 +422,62 @@ export default function Admin() {
                 <CardDescription>Envie mensagens para um usuário ou em massa</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Destinatário</Label>
-                    <Select value={notifTarget} onValueChange={setNotifTarget}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos os usuários</SelectItem>
-                        {profiles.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>{p.full_name ?? p.id.slice(0, 8)}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Tipo</Label>
-                    <Select value={notifType} onValueChange={(v) => setNotifType(v as "system" | "alert")}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="system">Sistema</SelectItem>
-                        <SelectItem value="alert">Alerta</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label>Título</Label>
+                  <Input value={notifTitle} onChange={(e) => setNotifTitle(e.target.value)} placeholder="Título da notificação" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Mensagem</Label>
+                  <Label>Texto</Label>
                   <Textarea rows={4} value={notifMsg} onChange={(e) => setNotifMsg(e.target.value)} placeholder="Escreva a mensagem..." />
                 </div>
-                <Button onClick={sendNotification}>
+                <div className="space-y-2">
+                  <Label>Destinatários ({selectedRecipients.size}/{profiles.length})</Label>
+                  <div className="rounded-md border border-border">
+                    <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2">
+                      <Checkbox
+                        id="notif-all"
+                        checked={profiles.length > 0 && selectedRecipients.size === profiles.length}
+                        onCheckedChange={toggleAllRecipients}
+                      />
+                      <Label htmlFor="notif-all" className="cursor-pointer text-sm font-medium">
+                        Selecionar todos
+                      </Label>
+                    </div>
+                    <div className="max-h-72 overflow-auto">
+                      {profiles.length === 0 ? (
+                        <p className="px-3 py-6 text-center text-sm text-muted-foreground">Nenhum usuário</p>
+                      ) : (
+                        profiles.map((p) => (
+                          <div key={p.id} className="flex items-center gap-2 border-b border-border/50 px-3 py-2 last:border-b-0">
+                            <Checkbox
+                              id={`notif-${p.id}`}
+                              checked={selectedRecipients.has(p.id)}
+                              onCheckedChange={() => toggleRecipient(p.id)}
+                            />
+                            <Label htmlFor={`notif-${p.id}`} className="flex-1 cursor-pointer text-sm font-normal">
+                              {p.full_name ?? p.id.slice(0, 8)}
+                            </Label>
+                            {statusBadge(p.status)}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <Button onClick={sendNotification} disabled={selectedRecipients.size === 0}>
                   <Send className="mr-2 h-4 w-4" /> Enviar
                 </Button>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
+
+        <VoucherDialog
+          voucher={activeVoucher}
+          open={voucherOpen}
+          onOpenChange={setVoucherOpen}
+          onChanged={loadData}
+        />
       </div>
     </DashboardLayout>
   );
