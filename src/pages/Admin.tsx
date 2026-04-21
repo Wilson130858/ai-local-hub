@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Shield, Loader2, Plus, Send, KeyRound, Copy, Check, X, Trash2, UserPlus } from "lucide-react";
+import { Shield, Loader2, Plus, Send, KeyRound, Check, X, Trash2, UserPlus, Pause } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { formatCredits, parseReaisToCents } from "@/lib/utils";
+import { VoucherDialog, type VoucherDialogItem } from "@/components/admin/VoucherDialog";
 
 type ProfileStatus = "pending" | "approved" | "rejected";
 type Profile = {
