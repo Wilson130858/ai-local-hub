@@ -132,7 +132,11 @@ export default function Admin() {
       if (!max || max < 1) return toast.error("Quantidade de usos inválida");
     }
 
-    const codes = Array.from({ length: qty }, () => Math.random().toString(36).substring(2, 10).toUpperCase());
+    const randomCode = () => {
+      const bytes = crypto.getRandomValues(new Uint8Array(6));
+      return Array.from(bytes, (b) => b.toString(36).padStart(2, "0")).join("").substring(0, 8).toUpperCase();
+    };
+    const codes = Array.from({ length: qty }, randomCode);
     const rows = codes.map((code) => ({ code, value: cents, max_uses: max, created_by: user!.id }));
     const { error } = await supabase.from("credit_vouchers").insert(rows);
     if (error) return toast.error(error.message);
