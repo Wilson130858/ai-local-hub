@@ -403,6 +403,14 @@ export default function Admin() {
                                 >
                                   <LogIn className="h-4 w-4" />
                                 </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => { setDetailUser(p); setDetailOpen(true); }}
+                                  title="Faturamento"
+                                >
+                                  <Receipt className="h-4 w-4" />
+                                </Button>
                                 <Button size="sm" variant="ghost" onClick={() => {
                                   const email = prompt("Email do usuário para redefinir senha:");
                                   if (email) resetPassword(email);
