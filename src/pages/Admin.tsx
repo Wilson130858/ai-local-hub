@@ -585,6 +585,15 @@ export default function Admin() {
           onOpenChange={setVoucherOpen}
           onChanged={loadData}
         />
+
+        <UserDetailSheet
+          open={detailOpen}
+          onOpenChange={setDetailOpen}
+          userId={detailUser?.id ?? null}
+          userName={detailUser?.full_name ?? null}
+          credits={detailUser?.credits ?? 0}
+          status={detailUser?.status ?? ""}
+        />
       </div>
     </DashboardLayout>
   );
