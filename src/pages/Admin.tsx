@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Shield, Loader2, Plus, Send, KeyRound, Check, X, Trash2, UserPlus, Pause } from "lucide-react";
+import { Shield, Loader2, Plus, Send, KeyRound, Check, X, Trash2, UserPlus, Pause, LogIn, Coins } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { formatCredits, parseReaisToCents } from "@/lib/utils";
@@ -39,6 +40,41 @@ type Voucher = {
   uses_count: number;
   created_at: string;
 };
+
+function CreditsAdjustPopover({ onApply }: { onApply: (delta: string, sign: 1 | -1, reason: string) => void | Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("10,00");
+  const [reason, setReason] = useState("");
+  const submit = async (sign: 1 | -1) => {
+    await onApply(value, sign, reason);
+    setOpen(false);
+    setValue("10,00");
+    setReason("");
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button size="sm" variant="ghost" title="Ajustar créditos">
+          <Coins className="h-4 w-4" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 space-y-3" align="end">
+        <div className="space-y-1">
+          <Label className="text-xs">Valor (R$)</Label>
+          <Input value={value} onChange={(e) => setValue(e.target.value)} inputMode="decimal" className="h-8" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Motivo (opcional)</Label>
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} className="h-8" placeholder="Ex: bônus de boas-vindas" />
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" className="flex-1" onClick={() => submit(1)}>Adicionar</Button>
+          <Button size="sm" variant="outline" className="flex-1" onClick={() => submit(-1)}>Remover</Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function Admin() {
   const { user } = useAuth();
@@ -116,6 +152,25 @@ export default function Admin() {
   const resetPassword = async (email: string) => {
     const r = await callAdmin("reset_password", { email });
     if (r) toast.success(`Email de redefinição enviado para ${email}`);
+  };
+  const impersonate = async (userId: string) => {
+    const r = await callAdmin("impersonate_user", { user_id: userId });
+    const link = (r as { action_link?: string } | null)?.action_link;
+    if (link) {
+      window.open(link, "_blank", "noopener,noreferrer");
+      toast.success("Abrindo conta em nova aba", {
+        description: "Dica: use uma janela anônima para preservar sua sessão admin.",
+      });
+    }
+  };
+  const adjustCredits = async (userId: string, deltaReais: string, sign: 1 | -1, reason: string) => {
+    const cents = parseReaisToCents(deltaReais);
+    if (!cents || cents <= 0) return toast.error("Valor inválido");
+    const r = await callAdmin("adjust_credits", { user_id: userId, delta: sign * cents, reason });
+    if (r) {
+      toast.success(sign > 0 ? "Créditos adicionados" : "Créditos removidos");
+      loadData();
+    }
   };
   const createUser = async () => {
     if (!newEmail || !newPassword) return toast.error("Email e senha obrigatórios");
@@ -305,6 +360,17 @@ export default function Admin() {
                                     </Button>
                                   </>
                                 )}
+                                <CreditsAdjustPopover
+                                  onApply={async (v, sign, reason) => { await adjustCredits(p.id, v, sign, reason); }}
+                                />
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => impersonate(p.id)}
+                                  title="Acessar conta"
+                                >
+                                  <LogIn className="h-4 w-4" />
+                                </Button>
                                 <Button size="sm" variant="ghost" onClick={() => {
                                   const email = prompt("Email do usuário para redefinir senha:");
                                   if (email) resetPassword(email);

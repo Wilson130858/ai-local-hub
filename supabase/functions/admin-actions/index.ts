@@ -114,6 +114,48 @@ Deno.serve(async (req) => {
       return json({ success: true, user_id: newId });
     }
 
+    if (action === "impersonate_user") {
+      const { user_id } = body;
+      if (!user_id) return json({ error: "user_id required" }, 400);
+      const { data: target, error: getErr } = await admin.auth.admin.getUserById(user_id);
+      if (getErr || !target?.user?.email) return json({ error: "user not found" }, 404);
+      const origin = req.headers.get("origin") ?? "";
+      const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+        type: "magiclink",
+        email: target.user.email,
+        options: { redirectTo: origin + "/" },
+      });
+      if (linkErr) throw linkErr;
+      await audit("impersonate_user", user_id, { email: target.user.email });
+      return json({ success: true, action_link: linkData.properties?.action_link });
+    }
+
+    if (action === "adjust_credits") {
+      const { user_id, delta, reason } = body;
+      if (!user_id || typeof delta !== "number" || !Number.isFinite(delta) || delta === 0) {
+        return json({ error: "user_id and non-zero numeric delta required" }, 400);
+      }
+      const { data: prof, error: pErr } = await admin
+        .from("profiles").select("credits, full_name").eq("id", user_id).maybeSingle();
+      if (pErr || !prof) return json({ error: "profile not found" }, 404);
+      const before = prof.credits ?? 0;
+      const after = before + delta;
+      if (after < 0) return json({ error: "insufficient credits" }, 400);
+      const { error: updErr } = await admin.from("profiles").update({ credits: after }).eq("id", user_id);
+      if (updErr) throw updErr;
+      const reasonText = (reason && String(reason).trim()) || "ajuste manual";
+      const sign = delta > 0 ? "+" : "";
+      await admin.from("notifications").insert({
+        target_user_id: user_id,
+        title: "Créditos ajustados",
+        message: `Seus créditos foram ajustados em ${sign}${(delta / 100).toFixed(2)}. Motivo: ${reasonText}`,
+        type: "system",
+        created_by: callerId,
+      });
+      await audit("adjust_credits", user_id, { delta, reason: reasonText, before, after });
+      return json({ success: true, before, after });
+    }
+
     return json({ error: "Unknown action" }, 400);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unknown";
