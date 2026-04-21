@@ -268,7 +268,7 @@ export default function Admin() {
         </div>
 
         <Tabs defaultValue="users">
-          <TabsList>
+          <TabsList className="w-full justify-start overflow-x-auto sm:w-auto">
             <TabsTrigger value="users">
               Usuários
               {pendingCount > 0 && <Badge variant="destructive" className="ml-2 h-5 px-1.5 text-[10px]">{pendingCount}</Badge>}
