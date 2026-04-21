@@ -156,6 +156,64 @@ Deno.serve(async (req) => {
       return json({ success: true, before, after });
     }
 
+    if (action === "create_quote") {
+      const { tenant_id, name, description, amount, billing_type, recurrence_months } = body;
+      if (!tenant_id || !name || typeof amount !== "number" || amount <= 0) {
+        return json({ error: "tenant_id, name and positive amount required" }, 400);
+      }
+      if (billing_type !== "recurring" && billing_type !== "lifetime") {
+        return json({ error: "invalid billing_type" }, 400);
+      }
+      if (billing_type === "recurring") {
+        if (!Number.isInteger(recurrence_months) || recurrence_months < 1 || recurrence_months > 60) {
+          return json({ error: "recurrence_months must be 1-60" }, 400);
+        }
+      }
+      const { data: tenant, error: tErr } = await admin
+        .from("tenants").select("id, owner_id, business_name").eq("id", tenant_id).maybeSingle();
+      if (tErr || !tenant) return json({ error: "tenant not found" }, 404);
+
+      const { data: quote, error: qErr } = await admin.from("service_quotes").insert({
+        tenant_id,
+        created_by: callerId,
+        name,
+        description: description ?? null,
+        amount,
+        billing_type,
+        recurrence_months: billing_type === "recurring" ? recurrence_months : null,
+      }).select().single();
+      if (qErr) throw qErr;
+
+      await admin.from("notifications").insert({
+        target_user_id: tenant.owner_id,
+        title: "Novo orçamento recebido",
+        message: `${name} • R$ ${(amount / 100).toFixed(2)}. Acesse Configurações > Pagamento para aprovar.`,
+        type: "system",
+        created_by: callerId,
+      });
+      await audit("create_quote", tenant.owner_id, { quote_id: quote.id, amount, billing_type });
+      return json({ success: true, quote });
+    }
+
+    if (action === "update_setting") {
+      const { key, value } = body;
+      if (key !== "monthly_base_amount" && key !== "invoice_closing_day") {
+        return json({ error: "invalid setting key" }, 400);
+      }
+      if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+        return json({ error: "value must be a non-negative number" }, 400);
+      }
+      if (key === "invoice_closing_day" && (value < 1 || value > 28 || !Number.isInteger(value))) {
+        return json({ error: "invoice_closing_day must be integer 1-28" }, 400);
+      }
+      const { error } = await admin.from("app_settings").upsert({
+        key, value, updated_at: new Date().toISOString(), updated_by: callerId,
+      });
+      if (error) throw error;
+      await audit("update_setting", null, { key, value });
+      return json({ success: true });
+    }
+
     return json({ error: "Unknown action" }, 400);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unknown";

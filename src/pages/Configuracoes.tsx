@@ -15,6 +15,9 @@ import { CreditCard, LogOut, Moon, Sun, CheckCircle2, Sparkles, Gift, Wallet } f
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { formatCredits } from "@/lib/utils";
+import { CurrentInvoiceCard } from "@/components/billing/CurrentInvoiceCard";
+import { PendingQuoteCard } from "@/components/billing/PendingQuoteCard";
+import type { ServiceQuote } from "@/lib/billing";
 
 const defaultPrompt = `Você é o atendente virtual da Barbearia Vintage Petrolina.
 - Horário: Seg a Sáb, 9h às 19h.
@@ -30,12 +33,41 @@ const Configuracoes = () => {
   const [credits, setCredits] = useState(0);
   const [voucherCode, setVoucherCode] = useState("");
   const [redeeming, setRedeeming] = useState(false);
+  const [quotes, setQuotes] = useState<ServiceQuote[]>([]);
+  const [baseAmount, setBaseAmount] = useState(0);
+  const [closingDay, setClosingDay] = useState(5);
 
   useEffect(() => {
     if (!user) return;
     supabase.from("profiles").select("credits").eq("id", user.id).maybeSingle()
       .then(({ data }) => setCredits(data?.credits ?? 0));
   }, [user]);
+
+  const loadBilling = async () => {
+    if (!user || isAdmin) return;
+    const [{ data: settings }, { data: tenants }] = await Promise.all([
+      supabase.from("app_settings").select("key, value"),
+      supabase.from("tenants").select("id").eq("owner_id", user.id),
+    ]);
+    const map = new Map((settings ?? []).map((r) => [r.key, r.value]));
+    setBaseAmount(Number(map.get("monthly_base_amount") ?? 0));
+    setClosingDay(Number(map.get("invoice_closing_day") ?? 5));
+    const tenantIds = (tenants ?? []).map((t) => t.id);
+    if (tenantIds.length === 0) { setQuotes([]); return; }
+    const { data: qs } = await supabase
+      .from("service_quotes").select("*").in("tenant_id", tenantIds).order("created_at", { ascending: false });
+    setQuotes((qs ?? []) as ServiceQuote[]);
+  };
+
+  useEffect(() => {
+    loadBilling();
+    if (!user || isAdmin) return;
+    const channel = supabase
+      .channel(`quotes-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "service_quotes" }, () => loadBilling())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const redeem = async () => {
     if (!voucherCode.trim()) return;
@@ -100,6 +132,32 @@ const Configuracoes = () => {
 
         {isClient && (
           <TabsContent value="pagamento" className="mt-6 space-y-4">
+            {/* Fatura atual */}
+            <CurrentInvoiceCard
+              baseAmount={baseAmount}
+              closingDay={closingDay}
+              acceptedQuotes={quotes.filter((q) => q.status === "accepted")}
+            />
+
+            {/* Orçamentos pendentes */}
+            <Card className="border-border/60 p-6 shadow-soft">
+              <div className="mb-4 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-accent" />
+                <h3 className="text-base font-semibold">Orçamentos pendentes</h3>
+              </div>
+              {quotes.filter((q) => q.status === "pending").length === 0 ? (
+                <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                  Nenhum orçamento aguardando sua aprovação.
+                </p>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {quotes.filter((q) => q.status === "pending").map((q) => (
+                    <PendingQuoteCard key={q.id} quote={q} onDecided={loadBilling} />
+                  ))}
+                </div>
+              )}
+            </Card>
+
             {/* Saldo + resgate */}
             <Card className="overflow-hidden border-border/60 shadow-soft">
               <div className="bg-gradient-to-br from-primary to-accent p-6 text-primary-foreground">

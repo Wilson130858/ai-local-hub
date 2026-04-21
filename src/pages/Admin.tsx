@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Shield, Loader2, Plus, Send, KeyRound, Check, X, Trash2, UserPlus, Pause, LogIn, Coins } from "lucide-react";
+import { Shield, Loader2, Plus, Send, KeyRound, Check, X, Trash2, UserPlus, Pause, LogIn, Coins, Receipt, Settings as SettingsIcon, Save } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -19,6 +19,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { toast } from "sonner";
 import { formatCredits, parseReaisToCents } from "@/lib/utils";
 import { VoucherDialog, type VoucherDialogItem } from "@/components/admin/VoucherDialog";
+import { UserDetailSheet } from "@/components/admin/UserDetailSheet";
 
 type ProfileStatus = "pending" | "approved" | "rejected";
 type Profile = {
@@ -103,6 +104,37 @@ export default function Admin() {
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newName, setNewName] = useState("");
+
+  // user detail sheet
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailUser, setDetailUser] = useState<Profile | null>(null);
+
+  // app settings
+  const [baseAmountInput, setBaseAmountInput] = useState("99,00");
+  const [closingDayInput, setClosingDayInput] = useState("5");
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const loadSettings = async () => {
+    const { data } = await supabase.from("app_settings").select("key, value");
+    const map = new Map((data ?? []).map((r) => [r.key, r.value]));
+    const base = Number(map.get("monthly_base_amount") ?? 0);
+    setBaseAmountInput((base / 100).toFixed(2).replace(".", ","));
+    setClosingDayInput(String(map.get("invoice_closing_day") ?? 5));
+  };
+
+  useEffect(() => { loadSettings(); }, []);
+
+  const saveSettings = async () => {
+    const cents = parseReaisToCents(baseAmountInput);
+    if (cents === null || cents < 0) return toast.error("Mensalidade inválida");
+    const day = parseInt(closingDayInput);
+    if (!day || day < 1 || day > 28) return toast.error("Dia deve ser entre 1 e 28");
+    setSavingSettings(true);
+    const r1 = await callAdmin("update_setting", { key: "monthly_base_amount", value: cents });
+    const r2 = r1 ? await callAdmin("update_setting", { key: "invoice_closing_day", value: day }) : null;
+    setSavingSettings(false);
+    if (r1 && r2) toast.success("Configurações salvas");
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -275,6 +307,7 @@ export default function Admin() {
             </TabsTrigger>
             <TabsTrigger value="vouchers">Créditos</TabsTrigger>
             <TabsTrigger value="notifications">Notificações</TabsTrigger>
+            <TabsTrigger value="settings">Configurações</TabsTrigger>
           </TabsList>
 
           {/* USERS */}
@@ -370,6 +403,14 @@ export default function Admin() {
                                   title="Acessar conta"
                                 >
                                   <LogIn className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => { setDetailUser(p); setDetailOpen(true); }}
+                                  title="Faturamento"
+                                >
+                                  <Receipt className="h-4 w-4" />
                                 </Button>
                                 <Button size="sm" variant="ghost" onClick={() => {
                                   const email = prompt("Email do usuário para redefinir senha:");
@@ -536,6 +577,45 @@ export default function Admin() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* SETTINGS */}
+          <TabsContent value="settings">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <SettingsIcon className="h-4 w-4" /> Configurações de Faturamento
+                </CardTitle>
+                <CardDescription>Definições globais aplicadas a todos os clientes</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 max-w-md">
+                <div className="space-y-2">
+                  <Label>Mensalidade base padrão (R$)</Label>
+                  <Input
+                    inputMode="decimal"
+                    value={baseAmountInput}
+                    onChange={(e) => setBaseAmountInput(e.target.value)}
+                    placeholder="99,00"
+                  />
+                  <p className="text-xs text-muted-foreground">Valor cobrado mensalmente como base da fatura.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Dia de fechamento da fatura</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={28}
+                    value={closingDayInput}
+                    onChange={(e) => setClosingDayInput(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Dia do mês (1-28) em que a próxima fatura vence.</p>
+                </div>
+                <Button onClick={saveSettings} disabled={savingSettings}>
+                  {savingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  Salvar
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
 
         <VoucherDialog
@@ -543,6 +623,15 @@ export default function Admin() {
           open={voucherOpen}
           onOpenChange={setVoucherOpen}
           onChanged={loadData}
+        />
+
+        <UserDetailSheet
+          open={detailOpen}
+          onOpenChange={setDetailOpen}
+          userId={detailUser?.id ?? null}
+          userName={detailUser?.full_name ?? null}
+          credits={detailUser?.credits ?? 0}
+          status={detailUser?.status ?? ""}
         />
       </div>
     </DashboardLayout>

@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -109,6 +130,101 @@ export type Database = {
             columns: ["used_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_items: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string
+          id: string
+          invoice_id: string
+          kind: Database["public"]["Enums"]["invoice_item_kind"]
+          quote_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description: string
+          id?: string
+          invoice_id: string
+          kind: Database["public"]["Enums"]["invoice_item_kind"]
+          quote_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string
+          id?: string
+          invoice_id?: string
+          kind?: Database["public"]["Enums"]["invoice_item_kind"]
+          quote_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_items_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "service_quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          base_amount: number
+          closed_at: string | null
+          created_at: string
+          due_date: string
+          extras_amount: number
+          id: string
+          period_end: string
+          period_start: string
+          status: Database["public"]["Enums"]["invoice_status"]
+          tenant_id: string
+          total_amount: number
+        }
+        Insert: {
+          base_amount?: number
+          closed_at?: string | null
+          created_at?: string
+          due_date: string
+          extras_amount?: number
+          id?: string
+          period_end: string
+          period_start: string
+          status?: Database["public"]["Enums"]["invoice_status"]
+          tenant_id: string
+          total_amount?: number
+        }
+        Update: {
+          base_amount?: number
+          closed_at?: string | null
+          created_at?: string
+          due_date?: string
+          extras_amount?: number
+          id?: string
+          period_end?: string
+          period_start?: string
+          status?: Database["public"]["Enums"]["invoice_status"]
+          tenant_id?: string
+          total_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -238,6 +354,56 @@ export type Database = {
         }
         Relationships: []
       }
+      service_quotes: {
+        Row: {
+          amount: number
+          billing_type: Database["public"]["Enums"]["quote_billing_type"]
+          created_at: string
+          created_by: string
+          decided_at: string | null
+          description: string | null
+          id: string
+          name: string
+          recurrence_months: number | null
+          status: Database["public"]["Enums"]["quote_status"]
+          tenant_id: string
+        }
+        Insert: {
+          amount: number
+          billing_type: Database["public"]["Enums"]["quote_billing_type"]
+          created_at?: string
+          created_by: string
+          decided_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          recurrence_months?: number | null
+          status?: Database["public"]["Enums"]["quote_status"]
+          tenant_id: string
+        }
+        Update: {
+          amount?: number
+          billing_type?: Database["public"]["Enums"]["quote_billing_type"]
+          created_at?: string
+          created_by?: string
+          decided_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          recurrence_months?: number | null
+          status?: Database["public"]["Enums"]["quote_status"]
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_quotes_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           ai_config: Json
@@ -331,6 +497,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      decide_quote: {
+        Args: { _decision: string; _quote_id: string }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -344,9 +514,13 @@ export type Database = {
     Enums: {
       app_role: "admin" | "user"
       business_category: "barbearia" | "clinica" | "petshop"
+      invoice_item_kind: "base" | "quote_recurring" | "quote_lifetime"
+      invoice_status: "open" | "closed" | "paid"
       lead_status: "pendente" | "agendado" | "cancelado"
       notification_type: "system" | "alert"
       profile_status: "pending" | "approved" | "rejected"
+      quote_billing_type: "recurring" | "lifetime"
+      quote_status: "pending" | "accepted" | "declined"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -476,9 +650,13 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "user"],
       business_category: ["barbearia", "clinica", "petshop"],
+      invoice_item_kind: ["base", "quote_recurring", "quote_lifetime"],
+      invoice_status: ["open", "closed", "paid"],
       lead_status: ["pendente", "agendado", "cancelado"],
       notification_type: ["system", "alert"],
       profile_status: ["pending", "approved", "rejected"],
+      quote_billing_type: ["recurring", "lifetime"],
+      quote_status: ["pending", "accepted", "declined"],
     },
   },
 } as const
