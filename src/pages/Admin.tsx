@@ -307,6 +307,7 @@ export default function Admin() {
             </TabsTrigger>
             <TabsTrigger value="vouchers">Créditos</TabsTrigger>
             <TabsTrigger value="notifications">Notificações</TabsTrigger>
+            <TabsTrigger value="settings">Configurações</TabsTrigger>
           </TabsList>
 
           {/* USERS */}
