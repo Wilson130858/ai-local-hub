@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS dashboard_widgets jsonb NOT NULL DEFAULT '{"metrics":true,"performance":true,"bot":true,"insights":true}'::jsonb;

@@ -208,6 +208,7 @@ export type Database = {
           category: string | null
           created_at: string
           credits: number
+          dashboard_widgets: Json
           full_name: string | null
           id: string
           status: Database["public"]["Enums"]["profile_status"]
@@ -218,6 +219,7 @@ export type Database = {
           category?: string | null
           created_at?: string
           credits?: number
+          dashboard_widgets?: Json
           full_name?: string | null
           id: string
           status?: Database["public"]["Enums"]["profile_status"]
@@ -228,6 +230,7 @@ export type Database = {
           category?: string | null
           created_at?: string
           credits?: number
+          dashboard_widgets?: Json
           full_name?: string | null
           id?: string
           status?: Database["public"]["Enums"]["profile_status"]
