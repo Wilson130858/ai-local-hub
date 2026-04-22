@@ -42,12 +42,19 @@ type Voucher = {
   created_at: string;
 };
 
-function CreditsAdjustPopover({ onApply }: { onApply: (delta: string, sign: 1 | -1, reason: string) => void | Promise<void> }) {
+function CreditsAdjustPopover({
+  currentCredits,
+  onApply,
+}: {
+  currentCredits: number;
+  onApply: (delta: string, sign: 1 | -1, reason: string) => boolean | Promise<boolean>;
+}) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("10,00");
   const [reason, setReason] = useState("");
   const submit = async (sign: 1 | -1) => {
-    await onApply(value, sign, reason);
+    const ok = await onApply(value, sign, reason);
+    if (!ok) return;
     setOpen(false);
     setValue("10,00");
     setReason("");
@@ -68,6 +75,7 @@ function CreditsAdjustPopover({ onApply }: { onApply: (delta: string, sign: 1 | 
           <Label className="text-xs">Motivo (opcional)</Label>
           <Input value={reason} onChange={(e) => setReason(e.target.value)} className="h-8" placeholder="Ex: bônus de boas-vindas" />
         </div>
+        <p className="text-xs text-muted-foreground">Saldo atual: {formatCredits(currentCredits)}</p>
         <div className="flex gap-2">
           <Button size="sm" className="flex-1" onClick={() => submit(1)}>Adicionar</Button>
           <Button size="sm" variant="outline" className="flex-1" onClick={() => submit(-1)}>Remover</Button>
@@ -150,16 +158,22 @@ export default function Admin() {
   useEffect(() => { loadData(); }, []);
 
   const callAdmin = async (action: string, payload: Record<string, unknown> = {}) => {
-    const { data, error } = await supabase.functions.invoke("admin-actions", { body: { action, ...payload } });
-    if (error) {
-      toast.error(error.message);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-actions", { body: { action, ...payload } });
+      if (error) {
+        toast.error(error.message || "Não foi possível concluir a ação");
+        return null;
+      }
+      if (data && (data as { error?: string }).error) {
+        toast.error((data as { error: string }).error);
+        return null;
+      }
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Não foi possível concluir a ação";
+      toast.error(message);
       return null;
     }
-    if (data && (data as { error?: string }).error) {
-      toast.error((data as { error: string }).error);
-      return null;
-    }
-    return data;
   };
 
   const updateCategory = async (userId: string, category: string) => {
@@ -197,12 +211,22 @@ export default function Admin() {
   };
   const adjustCredits = async (userId: string, deltaReais: string, sign: 1 | -1, reason: string) => {
     const cents = parseReaisToCents(deltaReais);
-    if (!cents || cents <= 0) return toast.error("Valor inválido");
+    if (!cents || cents <= 0) {
+      toast.error("Valor inválido");
+      return false;
+    }
+    const profile = profiles.find((item) => item.id === userId);
+    if (sign < 0 && profile && cents > profile.credits) {
+      toast.error(`Saldo insuficiente. Disponível: ${formatCredits(profile.credits)}`);
+      return false;
+    }
     const r = await callAdmin("adjust_credits", { user_id: userId, delta: sign * cents, reason });
     if (r) {
       toast.success(sign > 0 ? "Créditos adicionados" : "Créditos removidos");
       loadData();
+      return true;
     }
+    return false;
   };
   const createUser = async () => {
     if (!newEmail || !newPassword) return toast.error("Email e senha obrigatórios");
@@ -394,7 +418,8 @@ export default function Admin() {
                                   </>
                                 )}
                                 <CreditsAdjustPopover
-                                  onApply={async (v, sign, reason) => { await adjustCredits(p.id, v, sign, reason); }}
+                                  currentCredits={p.credits}
+                                  onApply={(v, sign, reason) => adjustCredits(p.id, v, sign, reason)}
                                 />
                                 <Button
                                   size="sm"
