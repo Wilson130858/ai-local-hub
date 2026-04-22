@@ -152,7 +152,11 @@ Deno.serve(async (req) => {
       if (pErr || !prof) return json({ error: "profile not found" }, 404);
       const before = prof.credits ?? 0;
       const after = before + delta;
-      if (after < 0) return json({ error: "insufficient credits" }, 400);
+      if (after < 0) {
+        return json({
+          error: `Créditos insuficientes. Saldo atual: ${(before / 100).toFixed(2)}, tentativa de ajuste: ${(delta / 100).toFixed(2)}.`,
+        }, 400);
+      }
       const { error: updErr } = await admin.from("profiles").update({ credits: after }).eq("id", user_id);
       if (updErr) throw updErr;
       const reasonText = (reason && String(reason).trim()) || "ajuste manual";
