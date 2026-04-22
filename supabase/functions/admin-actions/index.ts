@@ -122,15 +122,23 @@ Deno.serve(async (req) => {
       const { user_id } = body;
       if (!user_id) return json({ error: "user_id required" }, 400);
       const { data: target, error: getErr } = await admin.auth.admin.getUserById(user_id);
-      if (getErr || !target?.user?.email) return json({ error: "user not found" }, 404);
+      if (getErr) {
+        console.error("getUserById error", getErr);
+        return json({ error: "user not found", detail: getErr.message }, 404);
+      }
+      const email = target?.user?.email;
+      if (!email) {
+        console.error("user has no email", { user_id, target });
+        return json({ error: "user has no email" }, 404);
+      }
       const origin = req.headers.get("origin") ?? "";
       const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
         type: "magiclink",
-        email: target.user.email,
+        email,
         options: { redirectTo: origin + "/" },
       });
       if (linkErr) throw linkErr;
-      await audit("impersonate_user", user_id, { email: target.user.email });
+      await audit("impersonate_user", user_id, { email });
       return json({ success: true, action_link: linkData.properties?.action_link });
     }
 
