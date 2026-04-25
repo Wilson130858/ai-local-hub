@@ -1,131 +1,79 @@
 
+# Monitoramento de custo Lovable Cloud no painel Admin
 
-# Sistema de Faturamento e Orçamentos
+Adicionar visibilidade do consumo da plataforma para você antecipar quando o saldo grátis de US$ 25/mês está perto de estourar, com limites configuráveis e notificação automática.
 
-Vou implementar o ciclo completo: admin cria orçamentos → cliente aprova/recusa → fatura mensal acumula valores aceitos no dia de fechamento.
+## O que será construído
 
-## 1. Modelagem de Dados (migrations)
+### 1. Configurações (aba Configurações do Admin)
 
-**Nova tabela `service_quotes`** (orçamentos enviados pelo admin)
-- `id`, `tenant_id`, `created_by` (admin), `name`, `description`, `amount` (cents), `billing_type` (`recurring` | `lifetime`), `recurrence_months` (nullable), `status` (`pending` | `accepted` | `declined`), `monthly_base_amount` (snapshot da mensalidade base na criação? não — fica em config global), `decided_at`, `created_at`.
-- Index em `(tenant_id, status)`.
+Três novos campos editáveis (salvos em `app_settings`):
 
-**Nova tabela `invoices`** (fatura mensal por tenant)
-- `id`, `tenant_id`, `period_start`, `period_end`, `due_date`, `base_amount`, `extras_amount`, `total_amount`, `status` (`open` | `closed` | `paid`), `closed_at`, `created_at`.
-- Unique `(tenant_id, period_start)`.
+- **Saldo mensal de Cloud (USD)** — padrão `25` (o saldo grátis).
+- **Limite de atenção (% do saldo)** — padrão `60`. Pinta o card de amarelo quando o gasto projetado passar disso.
+- **Limite crítico (% do saldo)** — padrão `85`. Pinta de vermelho e dispara notificação.
 
-**Nova tabela `invoice_items`** (linhas da fatura)
-- `id`, `invoice_id`, `quote_id` (nullable, p/ base), `description`, `amount`, `kind` (`base` | `quote_recurring` | `quote_lifetime`).
+### 2. Card "Consumo Lovable Cloud" no painel Admin
 
-**Nova tabela `app_settings`** (chave-valor global)
-- `key` (PK), `value` (jsonb), `updated_at`, `updated_by`.
-- Seed inicial: `monthly_base_amount` (cents), `invoice_closing_day` (1-28).
+Card destacado no topo da aba "Visão Geral" do `/admin` mostrando, **da plataforma inteira**:
 
-**RLS**:
-- `service_quotes`: tenant owner SELECT/UPDATE (apenas status pending→accepted/declined); admin ALL.
-- `invoices` / `invoice_items`: tenant owner SELECT; admin ALL.
-- `app_settings`: admin ALL; authenticated SELECT (read-only para mostrar valor base ao cliente).
+- **Gasto estimado do mês corrente em USD** (com barra de progresso colorida vs limite).
+- **Projeção para o fim do mês** (extrapolação linear do ritmo atual).
+- **Breakdown** por tipo de uso:
+  - Leads ingeridos no mês (volume × custo unitário estimado).
+  - Invocações de edge function (admin-actions + ingest-lead).
+  - Linhas em tabelas de alto crescimento (`leads`, `notifications`, `audit_logs`).
+- **Status visual**: verde (ok) / amarelo (atenção) / vermelho (crítico).
+- Botão **"Ver detalhes"** abrindo um Sheet com gráfico de leads/dia dos últimos 30 dias.
 
-**Função RPC `decide_quote(_quote_id uuid, _decision text)`** (security definer)
-- Valida que caller é dono do tenant do quote.
-- Atualiza status, registra `decided_at`.
-- Cria notificação para o admin criador.
-- Retorna `{ success, status }`.
+### 3. Notificação automática quando estourar limite
 
-## 2. Edge Function `admin-actions` — novas actions
+Quando a projeção mensal cruza o limite de atenção ou crítico **pela primeira vez no mês**:
 
-- **`create_quote`**: insere em `service_quotes`, cria notificação para o tenant owner (“Novo orçamento: {name} - R$X”), audit log.
-- **`update_setting`**: upsert em `app_settings` (apenas `monthly_base_amount` e `invoice_closing_day`), audit log.
-- **`close_invoice_period`** (manual por enquanto, cron depois): para cada tenant, calcula período corrente, soma base + quotes aceitos no período (recurring ainda dentro dos meses contratados + lifetime do mês), gera `invoice` + `invoice_items`, fecha.
+- Cria uma `notification` para todos os admins com título tipo "Atenção: consumo Cloud em 62% do saldo" e mensagem com a projeção.
+- Marca em `app_settings` que o aviso daquele nível já foi disparado naquele mês (evita spam).
+- Reseta no início de cada mês.
 
-## 3. UI — Cliente (`src/pages/Configuracoes.tsx` aba Pagamento)
+A verificação roda a cada hora via cron (`pg_cron` + `pg_net`) chamando uma nova edge function `cloud-usage-check`.
 
-Reorganizar a aba “Pagamento” em três blocos:
+## Como o cálculo de custo funciona
 
-**Bloco A — Fatura Atual** (Card destacado)
-- Próximo vencimento (calculado a partir de `invoice_closing_day`).
-- Linha: `Mensalidade base ............. R$ X`
-- Linha por quote aceito ativo no período: `{name} ............. R$ Y`
-- Total em destaque.
-- Cálculo client-side a partir de `app_settings` + quotes accepted do tenant.
+Não temos acesso direto à API de billing do Lovable Cloud, então usamos uma **estimativa baseada em uso observável** com coeficientes configuráveis:
 
-**Bloco B — Orçamentos Pendentes** (grid de cards)
-- Cada card: nome, descrição, valor formatado, badge do tipo (Recorrência X meses / Vitalício).
-- Dois botões: **Aceitar e Adicionar à Fatura** (`bg-success`) e **Recusar** (`variant="destructive"`).
-- Ao aceitar: chama `decide_quote`, toast de confirmação com ícone Sparkles, atualiza fatura em tempo real (refetch + animação no total).
-- Ao recusar: confirm dialog leve, depois `decide_quote`.
-- Empty state amigável quando não há pendentes.
+- `cost_per_1k_leads` (USD) — padrão `0.20`
+- `cost_per_1k_function_invocations` (USD) — padrão `0.10`
+- `cost_per_gb_storage_month` (USD) — padrão `0.125`
 
-**Bloco C — Histórico de Faturas** (mantém o card existente, mas trocando mock por `invoices` reais quando existirem; fallback ao mock se vazio).
+Tudo armazenado em `app_settings` e editável pelo admin pra você calibrar conforme o gasto real for aparecendo no Lovable. A estimativa é claramente rotulada como "estimada" na UI.
 
-## 4. UI — Admin (`src/pages/Admin.tsx`)
+## Detalhes técnicos
 
-**Nova sub-aba dentro de “Usuários”**: ao clicar num usuário, abre **Sheet/Dialog “Perfil do Cliente”** com tabs internas:
-- **Resumo** (dados atuais — créditos, status).
-- **Faturamento** (nova).
+**Migration (schema)**: nenhuma tabela nova — só seeds em `app_settings` para as chaves novas:
+- `cloud_monthly_budget_usd`, `cloud_warning_pct`, `cloud_critical_pct`
+- `cost_per_1k_leads`, `cost_per_1k_function_invocations`, `cost_per_gb_storage_month`
+- `cloud_alert_state` (jsonb com `{month, warning_sent, critical_sent}`)
 
-**Aba Faturamento contém**:
-- Botão **“+ Adicionar Serviço/Orçamento”** → Dialog (`QuoteDialog`):
-  - Nome (input), Descrição (textarea), Valor R$ (input mask), Tipo (RadioGroup: Recorrência | Vitalício).
-  - Se Recorrência: campo numérico “Quantidade de meses” (1-60).
-  - Submit chama edge function `create_quote`.
-- **Timeline de orçamentos** (lista cronológica):
-  - Card por quote: nome, valor, tipo, data de envio, **Badge** colorida:
-    - Pendente → `secondary` (amarelo via classe custom)
-    - Aceito → `default` com classe `bg-success`
-    - Recusado → `destructive`
-  - Mostra `decided_at` quando aplicável.
+**Edge function nova**: `supabase/functions/cloud-usage-check/index.ts`
+- Conta `leads` do mês, invocações via `function_edge_logs` (analytics), tamanho aproximado das tabelas via `pg_total_relation_size`.
+- Calcula custo estimado e projeção.
+- Compara com limites e dispara notificações para todos admins se cruzou um nível novo.
+- Atualiza `cloud_alert_state`.
 
-**Nova aba “Configurações” no Admin** (top-level):
-- Input numérico **“Dia de fechamento da fatura”** (1-28).
-- Input monetário **“Mensalidade base padrão”** (R$).
-- Botão Salvar → `update_setting`.
+**Cron job** (via insert tool, não migração — contém URL/anon key):
+- `cloud_usage_hourly_check` rodando de hora em hora.
 
-## 5. Componentes novos
+**Frontend novo**:
+- `src/components/admin/CloudUsageCard.tsx` — card principal.
+- `src/components/admin/CloudUsageDetailSheet.tsx` — gráfico e breakdown detalhado.
+- `src/lib/cloud-usage.ts` — funções de cálculo (custo estimado, projeção mensal, helpers de formatação USD).
 
-- `src/components/admin/QuoteDialog.tsx` — modal de criação.
-- `src/components/admin/UserDetailSheet.tsx` — sheet com tabs Resumo/Faturamento.
-- `src/components/admin/QuotesTimeline.tsx` — lista de quotes do tenant.
-- `src/components/billing/PendingQuoteCard.tsx` — card de aprovação para o cliente.
-- `src/components/billing/CurrentInvoiceCard.tsx` — card de fatura atual.
-- `src/lib/billing.ts` — helpers: `computeNextDueDate(closingDay)`, `computeCurrentInvoice(base, quotes, period)`, formatters.
+**Frontend editado**:
+- `src/pages/Admin.tsx` — montar o `CloudUsageCard` no topo da aba Visão Geral; adicionar os 6 novos campos na aba Configurações.
 
-## 6. Realtime
+**RLS**: tudo usa `is_admin()` que já existe — só admins veem o card e editam os limites.
 
-- Habilitar realtime em `service_quotes` para que o cliente veja novos orçamentos chegarem sem refresh.
-- Habilitar realtime em `notifications` (já existe? verificar).
+## Fora do escopo
 
-## 7. Fora do escopo desta fatia (deixo registrado)
-
-- Cobrança automática (Stripe) — plugar depois.
-- Cron job para fechar faturas mensalmente (por enquanto botão manual no admin).
-- PDF da fatura.
-
-## Arquivos afetados
-
-**Migrations** (novas):
-- Criar `service_quotes`, `invoices`, `invoice_items`, `app_settings` com RLS + seed + função `decide_quote`.
-
-**Edge function**:
-- `supabase/functions/admin-actions/index.ts` — actions `create_quote`, `update_setting`, `close_invoice_period`.
-
-**Frontend novos**:
-- `src/components/admin/QuoteDialog.tsx`
-- `src/components/admin/UserDetailSheet.tsx`
-- `src/components/admin/QuotesTimeline.tsx`
-- `src/components/billing/PendingQuoteCard.tsx`
-- `src/components/billing/CurrentInvoiceCard.tsx`
-- `src/lib/billing.ts`
-
-**Frontend editados**:
-- `src/pages/Configuracoes.tsx` — refactor aba Pagamento.
-- `src/pages/Admin.tsx` — nova aba Configurações + integração com UserDetailSheet.
-
-## Notas de design
-
-- Mantém paleta HSL atual (success/destructive já existem em `index.css`).
-- Cards com `shadow-soft` e `border-border/60` (padrão do projeto).
-- Valores em centavos no banco, formatados via `formatCredits`/novo `formatBRL`.
-- Badges seguem variantes shadcn + classes utilitárias do success.
-- Mobile: timeline e cards em coluna única, botões full-width abaixo de `sm`.
-
+- Integração real com a API de billing do Lovable (não é exposta).
+- Bloqueio automático de ingest quando estourar (só alerta — você decide o que fazer).
+- Histórico mensal persistido (mostramos só o mês corrente; histórico fica para depois se quiser).
