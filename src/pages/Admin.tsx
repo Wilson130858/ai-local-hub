@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { formatCredits, parseReaisToCents } from "@/lib/utils";
 import { VoucherDialog, type VoucherDialogItem } from "@/components/admin/VoucherDialog";
 import { UserDetailSheet } from "@/components/admin/UserDetailSheet";
+import { CloudUsageCard } from "@/components/admin/CloudUsageCard";
 
 type ProfileStatus = "pending" | "approved" | "rejected";
 type Profile = {
@@ -121,6 +122,14 @@ export default function Admin() {
   const [baseAmountInput, setBaseAmountInput] = useState("99,00");
   const [closingDayInput, setClosingDayInput] = useState("5");
   const [savingSettings, setSavingSettings] = useState(false);
+  // cloud cost settings
+  const [cloudBudget, setCloudBudget] = useState("25");
+  const [cloudWarning, setCloudWarning] = useState("60");
+  const [cloudCritical, setCloudCritical] = useState("85");
+  const [costLeads, setCostLeads] = useState("0.20");
+  const [costInvocations, setCostInvocations] = useState("0.10");
+  const [costStorage, setCostStorage] = useState("0.125");
+  const [savingCloud, setSavingCloud] = useState(false);
 
   const loadSettings = async () => {
     const { data } = await supabase.from("app_settings").select("key, value");
@@ -128,6 +137,17 @@ export default function Admin() {
     const base = Number(map.get("monthly_base_amount") ?? 0);
     setBaseAmountInput((base / 100).toFixed(2).replace(".", ","));
     setClosingDayInput(String(map.get("invoice_closing_day") ?? 5));
+    const numOr = (k: string, fb: number) => {
+      const v = map.get(k);
+      const n = typeof v === "number" ? v : Number(v);
+      return Number.isFinite(n) ? n : fb;
+    };
+    setCloudBudget(String(numOr("cloud_monthly_budget_usd", 25)));
+    setCloudWarning(String(numOr("cloud_warning_pct", 60)));
+    setCloudCritical(String(numOr("cloud_critical_pct", 85)));
+    setCostLeads(String(numOr("cost_per_1k_leads", 0.2)));
+    setCostInvocations(String(numOr("cost_per_1k_function_invocations", 0.1)));
+    setCostStorage(String(numOr("cost_per_gb_storage_month", 0.125)));
   };
 
   useEffect(() => { loadSettings(); }, []);
@@ -142,6 +162,34 @@ export default function Admin() {
     const r2 = r1 ? await callAdmin("update_setting", { key: "invoice_closing_day", value: day }) : null;
     setSavingSettings(false);
     if (r1 && r2) toast.success("Configurações salvas");
+  };
+
+  const saveCloudSettings = async () => {
+    const parse = (s: string) => {
+      const n = Number(s.replace(",", "."));
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    };
+    const entries: Array<[string, number | null]> = [
+      ["cloud_monthly_budget_usd", parse(cloudBudget)],
+      ["cloud_warning_pct", parse(cloudWarning)],
+      ["cloud_critical_pct", parse(cloudCritical)],
+      ["cost_per_1k_leads", parse(costLeads)],
+      ["cost_per_1k_function_invocations", parse(costInvocations)],
+      ["cost_per_gb_storage_month", parse(costStorage)],
+    ];
+    if (entries.some(([, v]) => v === null)) return toast.error("Valores inválidos");
+    const w = parse(cloudWarning)!;
+    const c = parse(cloudCritical)!;
+    if (w > 100 || c > 100) return toast.error("Percentuais devem ser 0-100");
+    if (w >= c) return toast.error("Atenção deve ser menor que crítico");
+    setSavingCloud(true);
+    let ok = true;
+    for (const [key, value] of entries) {
+      const r = await callAdmin("update_setting", { key, value });
+      if (!r) { ok = false; break; }
+    }
+    setSavingCloud(false);
+    if (ok) toast.success("Limites de Cloud salvos");
   };
 
   const loadData = async () => {
@@ -336,6 +384,9 @@ export default function Admin() {
 
           {/* USERS */}
           <TabsContent value="users">
+            <div className="mb-6">
+              <CloudUsageCard />
+            </div>
             <Card>
               <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
                 <div>
@@ -605,14 +656,15 @@ export default function Admin() {
 
           {/* SETTINGS */}
           <TabsContent value="settings">
-            <Card>
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <SettingsIcon className="h-4 w-4" /> Configurações de Faturamento
                 </CardTitle>
                 <CardDescription>Definições globais aplicadas a todos os clientes</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4 max-w-md">
+              <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Mensalidade base padrão (R$)</Label>
                   <Input
@@ -639,7 +691,50 @@ export default function Admin() {
                   Salvar
                 </Button>
               </CardContent>
-            </Card>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <SettingsIcon className="h-4 w-4" /> Limites de Lovable Cloud
+                  </CardTitle>
+                  <CardDescription>Controle de gasto e alertas automáticos</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Orçamento mensal (USD)</Label>
+                    <Input inputMode="decimal" value={cloudBudget} onChange={(e) => setCloudBudget(e.target.value)} />
+                    <p className="text-xs text-muted-foreground">Saldo grátis padrão é US$ 25.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Atenção (%)</Label>
+                      <Input inputMode="decimal" value={cloudWarning} onChange={(e) => setCloudWarning(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Crítico (%)</Label>
+                      <Input inputMode="decimal" value={cloudCritical} onChange={(e) => setCloudCritical(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>USD por 1.000 leads</Label>
+                    <Input inputMode="decimal" value={costLeads} onChange={(e) => setCostLeads(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>USD por 1.000 invocações de função</Label>
+                    <Input inputMode="decimal" value={costInvocations} onChange={(e) => setCostInvocations(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>USD por GB·mês de storage</Label>
+                    <Input inputMode="decimal" value={costStorage} onChange={(e) => setCostStorage(e.target.value)} />
+                  </div>
+                  <Button onClick={saveCloudSettings} disabled={savingCloud}>
+                    {savingCloud ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Salvar limites
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
 
