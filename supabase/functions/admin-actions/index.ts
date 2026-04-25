@@ -213,14 +213,25 @@ Deno.serve(async (req) => {
 
     if (action === "update_setting") {
       const { key, value } = body;
-      if (key !== "monthly_base_amount" && key !== "invoice_closing_day") {
-        return json({ error: "invalid setting key" }, 400);
-      }
+      const allowed = new Set([
+        "monthly_base_amount",
+        "invoice_closing_day",
+        "cloud_monthly_budget_usd",
+        "cloud_warning_pct",
+        "cloud_critical_pct",
+        "cost_per_1k_leads",
+        "cost_per_1k_function_invocations",
+        "cost_per_gb_storage_month",
+      ]);
+      if (!allowed.has(key)) return json({ error: "invalid setting key" }, 400);
       if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
         return json({ error: "value must be a non-negative number" }, 400);
       }
       if (key === "invoice_closing_day" && (value < 1 || value > 28 || !Number.isInteger(value))) {
         return json({ error: "invoice_closing_day must be integer 1-28" }, 400);
+      }
+      if ((key === "cloud_warning_pct" || key === "cloud_critical_pct") && value > 100) {
+        return json({ error: "percent must be 0-100" }, 400);
       }
       const { error } = await admin.from("app_settings").upsert({
         key, value, updated_at: new Date().toISOString(), updated_by: callerId,
