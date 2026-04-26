@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Loader2, CalendarClock, Send } from "lucide-react";
+import { Plus, Loader2, CalendarClock, Send, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCredits } from "@/lib/utils";
 import { QuoteDialog } from "./QuoteDialog";
@@ -35,6 +35,11 @@ export function UserDetailSheet({ open, onOpenChange, userId, userName, credits,
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  // criação de tenant
+  const [newBusinessName, setNewBusinessName] = useState("");
+  const [newBillingDay, setNewBillingDay] = useState("5");
+  const [creatingTenant, setCreatingTenant] = useState(false);
+
   const load = async () => {
     if (!userId) return;
     setLoading(true);
@@ -53,6 +58,8 @@ export function UserDetailSheet({ open, onOpenChange, userId, userName, credits,
       setTenantId(null);
       setTenantName("");
       setQuotes([]);
+      setNewBusinessName("");
+      setNewBillingDay("5");
     }
     setLoading(false);
   };
@@ -72,6 +79,27 @@ export function UserDetailSheet({ open, onOpenChange, userId, userName, credits,
     if (error) return toast.error(error.message);
     if ((data as { error?: string })?.error) return toast.error((data as { error: string }).error);
     toast.success("Proposta enviada ao cliente para aprovação");
+    load();
+  };
+
+  const createTenant = async () => {
+    if (!userId) return;
+    if (!newBusinessName.trim()) return toast.error("Nome do negócio obrigatório");
+    const day = parseInt(newBillingDay);
+    if (!Number.isInteger(day) || day < 1 || day > 28) return toast.error("Dia deve ser entre 1 e 28");
+    setCreatingTenant(true);
+    const { data, error } = await supabase.functions.invoke("admin-actions", {
+      body: {
+        action: "create_tenant_for_user",
+        user_id: userId,
+        business_name: newBusinessName.trim(),
+        billing_day: day,
+      },
+    });
+    setCreatingTenant(false);
+    if (error) return toast.error(error.message);
+    if ((data as { error?: string })?.error) return toast.error((data as { error: string }).error);
+    toast.success("Negócio criado para o cliente");
     load();
   };
 
@@ -105,9 +133,39 @@ export function UserDetailSheet({ open, onOpenChange, userId, userName, credits,
           </TabsContent>
           <TabsContent value="billing" className="mt-4 space-y-4">
             {!tenantId ? (
-              <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-                Este usuário ainda não tem um negócio configurado.
-              </p>
+              <div className="space-y-3 rounded-md border border-dashed border-border bg-muted/30 p-4">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <Label className="text-sm font-medium">Criar negócio do cliente</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Este cliente ainda não tem um negócio. Crie um para liberar o faturamento (serviços, dia de cobrança e propostas).
+                </p>
+                <div className="space-y-2">
+                  <Label className="text-xs">Nome do negócio</Label>
+                  <Input
+                    value={newBusinessName}
+                    onChange={(e) => setNewBusinessName(e.target.value)}
+                    placeholder="Ex: Barbearia do João"
+                    className="h-9"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Dia de cobrança (1-28)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={28}
+                    value={newBillingDay}
+                    onChange={(e) => setNewBillingDay(e.target.value)}
+                    className="h-9 w-24"
+                  />
+                </div>
+                <Button size="sm" onClick={createTenant} disabled={creatingTenant} className="w-full">
+                  {creatingTenant ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                  Criar negócio
+                </Button>
+              </div>
             ) : (
               <>
                 <div className="rounded-md border border-border p-4">
