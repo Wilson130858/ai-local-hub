@@ -2,7 +2,8 @@
 // Authentication:
 //   - Cron call: header `x-cron-secret` must match env CRON_SECRET.
 //   - Manual admin call (single tenant): valid Bearer JWT of an admin user.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.58.0";
+// deno-lint-ignore-file no-explicit-any
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.58.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -86,7 +87,7 @@ function isQuoteActiveInPeriod(q: Quote, ref: Date): boolean {
 }
 
 async function closeForTenant(
-  admin: ReturnType<typeof createClient>,
+  admin: SupabaseClient<any, any, any>,
   tenant: Tenant,
 ): Promise<{ closed: boolean; invoice_id?: string; total?: number; reason?: string }> {
   const today = ymdInTZ(new Date());
@@ -106,14 +107,15 @@ async function closeForTenant(
   }
 
   // Busca/cria invoice aberta atual
-  let { data: openInv } = await admin
+  let openInvRes = await admin
     .from("invoices")
     .select("id, tenant_id, status, period_start, period_end, due_date")
     .eq("tenant_id", tenant.id)
     .eq("status", "open")
     .order("created_at", { ascending: false })
     .limit(1)
-    .maybeSingle<Invoice>();
+    .maybeSingle();
+  let openInv = openInvRes.data as Invoice | null;
 
   if (!openInv) {
     // Cria uma invoice aberta cobrindo do início da janela até hoje
@@ -232,7 +234,7 @@ async function closeForTenant(
   return { closed: true, invoice_id: openInv.id, total };
 }
 
-async function notifyOverdue(admin: ReturnType<typeof createClient>) {
+async function notifyOverdue(admin: SupabaseClient<any, any, any>) {
   const today = ymdInTZ(new Date());
   const todayISO = dateStr(today.y, today.m, today.day);
 
@@ -246,7 +248,7 @@ async function notifyOverdue(admin: ReturnType<typeof createClient>) {
   if (!overdue?.length) return 0;
 
   let count = 0;
-  for (const inv of overdue) {
+  for (const inv of overdue as Array<{ id: string; tenant_id: string; total_amount: number; due_date: string }>) {
     const { data: tenant } = await admin
       .from("tenants").select("owner_id").eq("id", inv.tenant_id).maybeSingle();
     if (!tenant?.owner_id) continue;
@@ -301,8 +303,9 @@ Deno.serve(async (req) => {
 
     // Caso 1: admin fechando manualmente um tenant específico
     if (isAdmin && tenantIdParam) {
-      const { data: tenant } = await admin
-        .from("tenants").select("id, owner_id, business_name, billing_day").eq("id", tenantIdParam).maybeSingle<Tenant>();
+      const { data: tenantRow } = await admin
+        .from("tenants").select("id, owner_id, business_name, billing_day").eq("id", tenantIdParam).maybeSingle();
+      const tenant = tenantRow as Tenant | null;
       if (!tenant) return json({ error: "tenant not found" }, 404);
       const result = await closeForTenant(admin, tenant);
       return json({ success: true, mode: "manual", result });
@@ -312,7 +315,7 @@ Deno.serve(async (req) => {
     const today = ymdInTZ(new Date());
     const { data: tenants } = await admin
       .from("tenants").select("id, owner_id, business_name, billing_day");
-    const due = (tenants ?? []).filter((t: Tenant) => t.billing_day === today.day) as Tenant[];
+    const due = ((tenants ?? []) as Tenant[]).filter((t) => t.billing_day === today.day);
 
     const results: Array<{ tenant_id: string; ok: boolean; total?: number; error?: string }> = [];
     for (const t of due) {
