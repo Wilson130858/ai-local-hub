@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Shield, Loader2, Plus, Send, KeyRound, Check, X, Trash2, UserPlus, Pause, LogIn, Coins, Receipt, Settings as SettingsIcon, Save } from "lucide-react";
+import { Shield, Loader2, Plus, Send, KeyRound, Check, X, Trash2, UserPlus, Pause, LogIn, Coins, Receipt, Settings as SettingsIcon, Save, Eye, EyeOff, RefreshCw, Copy } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
