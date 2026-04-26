@@ -67,10 +67,13 @@ export function BillingOverview() {
       const tenantQuotes = tenant ? quotes.filter((q) => q.tenant_id === tenant.id) : [];
       const accepted = tenantQuotes.filter((q) => q.status === "accepted");
       const active = accepted.filter((q) => isQuoteActiveInPeriod(q, ref));
-      // Usa a mesma lógica da fatura corrente:
+      // Total cobrado neste mês (fatura corrente):
       // - mês de aceite com prorata > 0 → cobra apenas o proporcional
       // - demais meses → cobra valor cheio
       const { total } = computeCurrentInvoice(accepted, ref);
+      // Mensalidade recorrente (valor cheio dos serviços ativos, informativo)
+      const monthly = active.reduce((s, q) => s + q.amount, 0);
+      // Quanto desse total veio de prorata neste mês
       const prorataMonth = accepted.reduce((s, q) => {
         if (!q.proration_amount || !q.decided_at) return s;
         const d = new Date(q.decided_at);
@@ -79,7 +82,6 @@ export function BillingOverview() {
         }
         return s;
       }, 0);
-      const monthly = total - prorataMonth;
       const pending = tenantQuotes.filter((q) => q.status === "pending").length;
       return {
         tenant,
