@@ -57,7 +57,13 @@ Deno.serve(async (req) => {
       }
       if (password.length > 128) return json({ error: "password too long" }, 400);
       const { error } = await admin.auth.admin.updateUserById(user_id, { password });
-      if (error) throw error;
+      if (error) {
+        const msg = error.message ?? "";
+        if (/weak|pwned|compromised|known/i.test(msg)) {
+          return json({ error: "Senha muito fraca ou já vazada. Escolha outra (evite senhas comuns)." }, 400);
+        }
+        return json({ error: msg || "Falha ao atualizar senha" }, 400);
+      }
       await audit("set_password", user_id);
       return json({ success: true });
     }
