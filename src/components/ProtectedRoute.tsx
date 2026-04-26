@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 interface Props {
   children: ReactNode;
   requireAdmin?: boolean;
+  blockAdmin?: boolean;
 }
 
-export function ProtectedRoute({ children, requireAdmin = false }: Props) {
+export function ProtectedRoute({ children, requireAdmin = false, blockAdmin = false }: Props) {
   const { user, isAdmin, status, loading, signOut } = useAuth();
 
   if (loading) {
@@ -46,6 +47,7 @@ export function ProtectedRoute({ children, requireAdmin = false }: Props) {
   }
 
   if (requireAdmin && !isAdmin) return <Navigate to="/" replace />;
+  if (blockAdmin && isAdmin) return <Navigate to="/admin" replace />;
 
   return <>{children}</>;
 }
