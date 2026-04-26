@@ -5,14 +5,13 @@ import { formatCredits } from "@/lib/utils";
 import { computeCurrentInvoice, computeNextDueDate, formatDate, type ServiceQuote } from "@/lib/billing";
 
 type Props = {
-  baseAmount: number;
-  closingDay: number;
+  billingDay: number;
   acceptedQuotes: ServiceQuote[];
 };
 
-export function CurrentInvoiceCard({ baseAmount, closingDay, acceptedQuotes }: Props) {
-  const { lines, total } = computeCurrentInvoice(baseAmount, acceptedQuotes);
-  const due = computeNextDueDate(closingDay);
+export function CurrentInvoiceCard({ billingDay, acceptedQuotes }: Props) {
+  const { lines, total } = computeCurrentInvoice(acceptedQuotes);
+  const due = computeNextDueDate(billingDay);
 
   return (
     <Card className="overflow-hidden border-border/60 shadow-soft">
@@ -31,6 +30,11 @@ export function CurrentInvoiceCard({ baseAmount, closingDay, acceptedQuotes }: P
         </div>
       </div>
       <div className="divide-y divide-border p-6 pt-4">
+        {lines.length === 0 && (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            Sem serviços ativos neste período.
+          </p>
+        )}
         {lines.map((l, i) => (
           <div key={i} className="flex items-center justify-between py-2 text-sm">
             <span className={l.kind === "base" ? "font-medium" : "text-muted-foreground"}>{l.description}</span>
