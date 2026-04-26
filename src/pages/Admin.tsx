@@ -125,10 +125,6 @@ export default function Admin() {
   const [pwdShow, setPwdShow] = useState(false);
   const [pwdSaving, setPwdSaving] = useState(false);
 
-  // app settings
-  const [baseAmountInput, setBaseAmountInput] = useState("99,00");
-  const [closingDayInput, setClosingDayInput] = useState("5");
-  const [savingSettings, setSavingSettings] = useState(false);
   // cloud cost settings
   const [cloudBudget, setCloudBudget] = useState("25");
   const [cloudWarning, setCloudWarning] = useState("60");
@@ -141,9 +137,6 @@ export default function Admin() {
   const loadSettings = async () => {
     const { data } = await supabase.from("app_settings").select("key, value");
     const map = new Map((data ?? []).map((r) => [r.key, r.value]));
-    const base = Number(map.get("monthly_base_amount") ?? 0);
-    setBaseAmountInput((base / 100).toFixed(2).replace(".", ","));
-    setClosingDayInput(String(map.get("invoice_closing_day") ?? 5));
     const numOr = (k: string, fb: number) => {
       const v = map.get(k);
       const n = typeof v === "number" ? v : Number(v);
@@ -158,18 +151,6 @@ export default function Admin() {
   };
 
   useEffect(() => { loadSettings(); }, []);
-
-  const saveSettings = async () => {
-    const cents = parseReaisToCents(baseAmountInput);
-    if (cents === null || cents < 0) return toast.error("Mensalidade inválida");
-    const day = parseInt(closingDayInput);
-    if (!day || day < 1 || day > 28) return toast.error("Dia deve ser entre 1 e 28");
-    setSavingSettings(true);
-    const r1 = await callAdmin("update_setting", { key: "monthly_base_amount", value: cents });
-    const r2 = r1 ? await callAdmin("update_setting", { key: "invoice_closing_day", value: day }) : null;
-    setSavingSettings(false);
-    if (r1 && r2) toast.success("Configurações salvas");
-  };
 
   const saveCloudSettings = async () => {
     const parse = (s: string) => {
@@ -686,43 +667,11 @@ export default function Admin() {
 
           {/* SETTINGS */}
           <TabsContent value="settings">
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <SettingsIcon className="h-4 w-4" /> Configurações de Faturamento
-                </CardTitle>
-                <CardDescription>Definições globais aplicadas a todos os clientes</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Mensalidade base padrão (R$)</Label>
-                  <Input
-                    inputMode="decimal"
-                    value={baseAmountInput}
-                    onChange={(e) => setBaseAmountInput(e.target.value)}
-                    placeholder="99,00"
-                  />
-                  <p className="text-xs text-muted-foreground">Valor cobrado mensalmente como base da fatura.</p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Dia de fechamento da fatura</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={28}
-                    value={closingDayInput}
-                    onChange={(e) => setClosingDayInput(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">Dia do mês (1-28) em que a próxima fatura vence.</p>
-                </div>
-                <Button onClick={saveSettings} disabled={savingSettings}>
-                  {savingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                  Salvar
-                </Button>
-              </CardContent>
-              </Card>
-
+            <div className="grid gap-6">
+              <p className="rounded-md border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                As configurações de faturamento (dia de cobrança e serviços) agora são individuais por cliente.
+                Acesse o cliente na aba "Usuários" para gerenciar.
+              </p>
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
