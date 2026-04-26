@@ -395,14 +395,11 @@ export default function Admin() {
             <TabsTrigger value="billing">Faturamento</TabsTrigger>
             <TabsTrigger value="vouchers">Créditos</TabsTrigger>
             <TabsTrigger value="notifications">Notificações</TabsTrigger>
-            <TabsTrigger value="settings">Configurações</TabsTrigger>
+            <TabsTrigger value="settings">Cloud</TabsTrigger>
           </TabsList>
 
           {/* USERS */}
           <TabsContent value="users">
-            <div className="mb-6">
-              <CloudUsageCard />
-            </div>
             <Card>
               <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
                 <div>
@@ -675,6 +672,7 @@ export default function Admin() {
           {/* SETTINGS */}
           <TabsContent value="settings">
             <div className="grid gap-6">
+              <CloudUsageCard />
               <p className="rounded-md border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
                 As configurações de faturamento (dia de cobrança e serviços) agora são individuais por cliente.
                 Acesse a aba "Faturamento" para a visão consolidada ou abra um cliente específico.
