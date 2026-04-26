@@ -302,6 +302,47 @@ Deno.serve(async (req) => {
       return json({ success: true, tenant });
     }
 
+    if (action === "revoke_quote") {
+      const { quote_id } = body;
+      if (!quote_id || typeof quote_id !== "string") return json({ error: "quote_id required" }, 400);
+
+      const { data: quote, error: qErr } = await admin
+        .from("service_quotes")
+        .select("id, status, tenant_id, name, billing_type")
+        .eq("id", quote_id)
+        .maybeSingle();
+      if (qErr) throw qErr;
+      if (!quote) return json({ error: "quote not found" }, 404);
+      if (quote.status !== "accepted") {
+        return json({ error: "Apenas serviços aceitos podem ser revogados" }, 400);
+      }
+      if ((quote.billing_type as string) === "billing_change") {
+        return json({ error: "Mudanças de dia de cobrança não podem ser revogadas" }, 400);
+      }
+
+      const { error: uErr } = await admin
+        .from("service_quotes")
+        .update({ status: "revoked" })
+        .eq("id", quote_id);
+      if (uErr) throw uErr;
+
+      const { data: tenant } = await admin
+        .from("tenants").select("owner_id").eq("id", quote.tenant_id).maybeSingle();
+
+      if (tenant?.owner_id) {
+        await admin.from("notifications").insert({
+          target_user_id: tenant.owner_id,
+          title: "Serviço revogado",
+          message: `O administrador revogou o serviço "${quote.name}". Ele não será mais cobrado nas próximas faturas.`,
+          type: "system",
+          created_by: callerId,
+        });
+      }
+
+      await audit("revoke_quote", tenant?.owner_id ?? null, { quote_id, name: quote.name });
+      return json({ success: true });
+    }
+
     if (action === "update_setting") {
       const { key, value } = body;
       const allowed = new Set([

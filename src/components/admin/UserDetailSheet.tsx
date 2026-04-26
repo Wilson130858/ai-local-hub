@@ -203,7 +203,7 @@ export function UserDetailSheet({ open, onOpenChange, userId, userName, credits,
                 {loading ? (
                   <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin" /></div>
                 ) : (
-                  <QuotesTimeline quotes={quotes} />
+                  <QuotesTimeline quotes={quotes} onChanged={load} />
                 )}
                 <QuoteDialog
                   open={dialogOpen}
