@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Shield, Loader2, Plus, Send, KeyRound, Check, X, Trash2, UserPlus, Pause, LogIn, Coins, Receipt, Settings as SettingsIcon, Save } from "lucide-react";
+import { Shield, Loader2, Plus, Send, KeyRound, Check, X, Trash2, UserPlus, Pause, LogIn, Coins, Receipt, Settings as SettingsIcon, Save, Eye, EyeOff, RefreshCw, Copy } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -117,6 +117,13 @@ export default function Admin() {
   // user detail sheet
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailUser, setDetailUser] = useState<Profile | null>(null);
+
+  // set password dialog
+  const [pwdOpen, setPwdOpen] = useState(false);
+  const [pwdUser, setPwdUser] = useState<Profile | null>(null);
+  const [pwdValue, setPwdValue] = useState("");
+  const [pwdShow, setPwdShow] = useState(false);
+  const [pwdSaving, setPwdSaving] = useState(false);
 
   // app settings
   const [baseAmountInput, setBaseAmountInput] = useState("99,00");
@@ -246,6 +253,32 @@ export default function Admin() {
   const resetPassword = async (email: string) => {
     const r = await callAdmin("reset_password", { email });
     if (r) toast.success(`Email de redefinição enviado para ${email}`);
+  };
+  const openSetPassword = (p: Profile) => {
+    setPwdUser(p);
+    setPwdValue("");
+    setPwdShow(false);
+    setPwdOpen(true);
+  };
+  const generateRandomPwd = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
+    const arr = crypto.getRandomValues(new Uint8Array(14));
+    setPwdValue(Array.from(arr, (b) => chars[b % chars.length]).join(""));
+    setPwdShow(true);
+  };
+  const submitSetPassword = async () => {
+    if (!pwdUser) return;
+    if (pwdValue.length < 6) return toast.error("A senha deve ter pelo menos 6 caracteres");
+    if (pwdValue.length > 128) return toast.error("Senha muito longa");
+    setPwdSaving(true);
+    const r = await callAdmin("set_password", { user_id: pwdUser.id, password: pwdValue });
+    setPwdSaving(false);
+    if (r) {
+      toast.success(`Senha de ${pwdUser.full_name ?? "usuário"} atualizada`);
+      setPwdOpen(false);
+      setPwdUser(null);
+      setPwdValue("");
+    }
   };
   const impersonate = async (userId: string) => {
     const r = await callAdmin("impersonate_user", { user_id: userId });
@@ -488,10 +521,7 @@ export default function Admin() {
                                 >
                                   <Receipt className="h-4 w-4" />
                                 </Button>
-                                <Button size="sm" variant="ghost" onClick={() => {
-                                  const email = prompt("Email do usuário para redefinir senha:");
-                                  if (email) resetPassword(email);
-                                }} title="Reset senha">
+                                <Button size="sm" variant="ghost" onClick={() => openSetPassword(p)} title="Definir nova senha">
                                   <KeyRound className="h-4 w-4" />
                                 </Button>
                                 <AlertDialog>
@@ -753,6 +783,82 @@ export default function Admin() {
           credits={detailUser?.credits ?? 0}
           status={detailUser?.status ?? ""}
         />
+
+        <Dialog open={pwdOpen} onOpenChange={(v) => { if (!pwdSaving) setPwdOpen(v); }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <KeyRound className="h-4 w-4" /> Definir nova senha
+              </DialogTitle>
+              <DialogDescription>
+                {pwdUser?.full_name ?? "Usuário"} terá a senha redefinida imediatamente. Compartilhe com segurança.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="space-y-2">
+                <Label htmlFor="admin-new-password">Nova senha</Label>
+                <div className="relative">
+                  <Input
+                    id="admin-new-password"
+                    type={pwdShow ? "text" : "password"}
+                    value={pwdValue}
+                    onChange={(e) => setPwdValue(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    autoComplete="new-password"
+                    className="pr-20 font-mono"
+                    disabled={pwdSaving}
+                  />
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      onClick={() => setPwdShow((v) => !v)}
+                      title={pwdShow ? "Ocultar" : "Mostrar"}
+                    >
+                      {pwdShow ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      onClick={() => {
+                        if (!pwdValue) return;
+                        navigator.clipboard.writeText(pwdValue);
+                        toast.success("Senha copiada");
+                      }}
+                      disabled={!pwdValue}
+                      title="Copiar"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={generateRandomPwd}
+                disabled={pwdSaving}
+                className="w-full"
+              >
+                <RefreshCw className="mr-2 h-4 w-4" /> Gerar senha aleatória
+              </Button>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPwdOpen(false)} disabled={pwdSaving}>
+                Cancelar
+              </Button>
+              <Button onClick={submitSetPassword} disabled={pwdSaving || pwdValue.length < 6}>
+                {pwdSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Salvar nova senha
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

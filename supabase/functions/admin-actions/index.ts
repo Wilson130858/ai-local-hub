@@ -49,6 +49,19 @@ Deno.serve(async (req) => {
       return json({ success: true });
     }
 
+    if (action === "set_password") {
+      const { user_id, password } = body;
+      if (!user_id || typeof user_id !== "string") return json({ error: "user_id required" }, 400);
+      if (!password || typeof password !== "string" || password.length < 6) {
+        return json({ error: "password must be at least 6 characters" }, 400);
+      }
+      if (password.length > 128) return json({ error: "password too long" }, 400);
+      const { error } = await admin.auth.admin.updateUserById(user_id, { password });
+      if (error) throw error;
+      await audit("set_password", user_id);
+      return json({ success: true });
+    }
+
     if (action === "approve_user") {
       const { user_id } = body;
       if (!user_id) return json({ error: "user_id required" }, 400);
