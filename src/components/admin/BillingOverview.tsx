@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCredits } from "@/lib/utils";
-import { isQuoteActiveInPeriod, formatDate, type ServiceQuote } from "@/lib/billing";
+import { computeCurrentInvoice, isQuoteActiveInPeriod, formatDate, type ServiceQuote } from "@/lib/billing";
 import { QuoteDialog } from "./QuoteDialog";
 import { UserDetailSheet } from "./UserDetailSheet";
 
@@ -67,7 +67,13 @@ export function BillingOverview() {
       const tenantQuotes = tenant ? quotes.filter((q) => q.tenant_id === tenant.id) : [];
       const accepted = tenantQuotes.filter((q) => q.status === "accepted");
       const active = accepted.filter((q) => isQuoteActiveInPeriod(q, ref));
+      // Total cobrado neste mês (fatura corrente):
+      // - mês de aceite com prorata > 0 → cobra apenas o proporcional
+      // - demais meses → cobra valor cheio
+      const { total } = computeCurrentInvoice(accepted, ref);
+      // Mensalidade recorrente (valor cheio dos serviços ativos, informativo)
       const monthly = active.reduce((s, q) => s + q.amount, 0);
+      // Quanto desse total veio de prorata neste mês
       const prorataMonth = accepted.reduce((s, q) => {
         if (!q.proration_amount || !q.decided_at) return s;
         const d = new Date(q.decided_at);
@@ -83,7 +89,7 @@ export function BillingOverview() {
         activeCount: active.length,
         monthly,
         prorataMonth,
-        total: monthly + prorataMonth,
+        total,
         pending,
       };
     });
@@ -239,7 +245,7 @@ export function BillingOverview() {
                         {formatCredits(row.total)}
                         {row.prorataMonth > 0 && (
                           <span className="ml-1 text-[10px] text-muted-foreground">
-                            (+{formatCredits(row.prorataMonth)} prorrata)
+                            ({formatCredits(row.prorataMonth)} prorrata)
                           </span>
                         )}
                       </TableCell>
