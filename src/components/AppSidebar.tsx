@@ -26,7 +26,9 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { isAdmin } = useAuth();
-  const items = isAdmin ? [...baseItems, { title: "Admin", url: "/admin", icon: Shield }] : baseItems;
+  const items = isAdmin
+    ? [{ title: "Home", url: "/", icon: Home }, { title: "Admin", url: "/admin", icon: Shield }]
+    : baseItems;
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
