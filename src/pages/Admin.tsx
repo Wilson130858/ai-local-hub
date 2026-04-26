@@ -21,6 +21,7 @@ import { formatCredits, parseReaisToCents } from "@/lib/utils";
 import { VoucherDialog, type VoucherDialogItem } from "@/components/admin/VoucherDialog";
 import { UserDetailSheet } from "@/components/admin/UserDetailSheet";
 import { CloudUsageCard } from "@/components/admin/CloudUsageCard";
+import { BillingOverview } from "@/components/admin/BillingOverview";
 
 type ProfileStatus = "pending" | "approved" | "rejected";
 type Profile = {
@@ -391,6 +392,7 @@ export default function Admin() {
               Usuários
               {pendingCount > 0 && <Badge variant="destructive" className="ml-2 h-5 px-1.5 text-[10px]">{pendingCount}</Badge>}
             </TabsTrigger>
+            <TabsTrigger value="billing">Faturamento</TabsTrigger>
             <TabsTrigger value="vouchers">Créditos</TabsTrigger>
             <TabsTrigger value="notifications">Notificações</TabsTrigger>
             <TabsTrigger value="settings">Configurações</TabsTrigger>
@@ -537,6 +539,11 @@ export default function Admin() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* BILLING */}
+          <TabsContent value="billing">
+            <BillingOverview />
           </TabsContent>
 
           {/* VOUCHERS */}
