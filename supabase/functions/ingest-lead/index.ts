@@ -30,6 +30,30 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "invalid status" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Validate types and length/format
+    const fail = (msg: string) => new Response(JSON.stringify({ error: msg }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    if (typeof tenant_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenant_id)) {
+      return fail("tenant_id must be a valid UUID");
+    }
+    if (typeof name !== "string" || name.length < 1 || name.length > 200) {
+      return fail("name must be 1-200 chars");
+    }
+    if (typeof phone !== "string" || phone.length > 32 || !/^[+0-9()\-\s]{6,32}$/.test(phone)) {
+      return fail("phone has invalid format");
+    }
+    const allowedOrigins = ["whatsapp", "n8n", "web", "instagram", "manual"];
+    if (origin !== undefined && origin !== null) {
+      if (typeof origin !== "string" || !allowedOrigins.includes(origin)) {
+        return fail("origin not allowed");
+      }
+    }
+    if (original_query !== undefined && original_query !== null) {
+      if (typeof original_query !== "string" || original_query.length > 4000) {
+        return fail("original_query must be a string up to 4000 chars");
+      }
+    }
+
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
