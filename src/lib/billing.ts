@@ -46,19 +46,22 @@ export function computeCurrentInvoice(
   const lines: InvoiceLine[] = [];
   for (const q of acceptedQuotes) {
     if (!isQuoteActiveInPeriod(q, ref)) continue;
-    lines.push({ description: q.name, amount: q.amount, kind: "extra" });
-    // prorata só conta no mês em que foi aceito
-    if (q.proration_amount && q.decided_at) {
-      const decided = new Date(q.decided_at);
-      const sameMonth =
-        decided.getFullYear() === ref.getFullYear() && decided.getMonth() === ref.getMonth();
-      if (sameMonth) {
-        lines.push({
-          description: `${q.name} (proporcional do mês)`,
-          amount: q.proration_amount,
-          kind: "extra",
-        });
-      }
+    const decided = q.decided_at ? new Date(q.decided_at) : null;
+    const isAcceptanceMonth =
+      decided !== null &&
+      decided.getFullYear() === ref.getFullYear() &&
+      decided.getMonth() === ref.getMonth();
+    // No mês em que foi aceito: cobra apenas o proporcional (se houver).
+    // Se não houver prorata (ex.: aceito no próprio dia de fechamento), cobra o valor cheio.
+    // Nos meses seguintes: cobra o valor cheio normalmente.
+    if (isAcceptanceMonth && q.proration_amount && q.proration_amount > 0) {
+      lines.push({
+        description: `${q.name} (proporcional do mês)`,
+        amount: q.proration_amount,
+        kind: "extra",
+      });
+    } else {
+      lines.push({ description: q.name, amount: q.amount, kind: "extra" });
     }
   }
   const total = lines.reduce((s, l) => s + l.amount, 0);
