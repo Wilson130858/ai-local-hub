@@ -118,6 +118,13 @@ export default function Admin() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailUser, setDetailUser] = useState<Profile | null>(null);
 
+  // set password dialog
+  const [pwdOpen, setPwdOpen] = useState(false);
+  const [pwdUser, setPwdUser] = useState<Profile | null>(null);
+  const [pwdValue, setPwdValue] = useState("");
+  const [pwdShow, setPwdShow] = useState(false);
+  const [pwdSaving, setPwdSaving] = useState(false);
+
   // app settings
   const [baseAmountInput, setBaseAmountInput] = useState("99,00");
   const [closingDayInput, setClosingDayInput] = useState("5");
