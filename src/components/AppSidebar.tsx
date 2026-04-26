@@ -1,4 +1,4 @@
-import { Home, Users, Settings, Bot, Shield } from "lucide-react";
+import { Home, Users, Settings, Bot, Shield, Receipt } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,
@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 const baseItems = [
   { title: "Home", url: "/", icon: Home },
   { title: "Leads", url: "/leads", icon: Users },
+  { title: "Faturas", url: "/faturas", icon: Receipt },
   { title: "Configurações", url: "/configuracoes", icon: Settings },
 ];
 

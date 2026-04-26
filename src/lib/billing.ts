@@ -85,3 +85,28 @@ export function previewProration(
   const prorata = daysRemaining > 0 && daysRemaining < 30 ? Math.floor((amount * daysRemaining) / 30) : 0;
   return { prorata, daysRemaining, nextDue: next };
 }
+
+/** Status visual derivado de uma invoice (open/closed/paid + due_date). */
+export type InvoiceDisplayStatus = "open" | "due_soon" | "overdue" | "paid";
+
+export function getInvoiceDisplayStatus(
+  status: "open" | "closed" | "paid",
+  dueDate: string,
+  ref: Date = new Date(),
+): InvoiceDisplayStatus {
+  if (status === "paid") return "paid";
+  if (status === "open") return "open";
+  // closed
+  const due = new Date(`${dueDate}T00:00:00`);
+  const today = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+  return due.getTime() < today.getTime() ? "overdue" : "due_soon";
+}
+
+export function invoiceStatusLabel(s: InvoiceDisplayStatus): string {
+  switch (s) {
+    case "open": return "Aberta";
+    case "due_soon": return "A vencer";
+    case "overdue": return "Atrasada";
+    case "paid": return "Paga";
+  }
+}
