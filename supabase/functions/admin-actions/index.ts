@@ -230,11 +230,56 @@ Deno.serve(async (req) => {
       return json({ success: true, quote });
     }
 
+    if (action === "propose_billing_day_change") {
+      const { tenant_id, proposed_billing_day } = body;
+      if (!tenant_id) return json({ error: "tenant_id required" }, 400);
+      if (!Number.isInteger(proposed_billing_day) || proposed_billing_day < 1 || proposed_billing_day > 28) {
+        return json({ error: "proposed_billing_day must be integer 1-28" }, 400);
+      }
+      const { data: tenant, error: tErr } = await admin
+        .from("tenants").select("id, owner_id, business_name, billing_day").eq("id", tenant_id).maybeSingle();
+      if (tErr || !tenant) return json({ error: "tenant not found" }, 404);
+      const currentDay = (tenant as { billing_day?: number }).billing_day ?? 5;
+      if (currentDay === proposed_billing_day) {
+        return json({ error: "Esse já é o dia atual de cobrança" }, 400);
+      }
+
+      // Cancela propostas pendentes anteriores do mesmo tipo (uma por vez)
+      await admin
+        .from("service_quotes")
+        .delete()
+        .eq("tenant_id", tenant_id)
+        .eq("status", "pending")
+        .eq("billing_type", "billing_change");
+
+      const { data: quote, error: qErr } = await admin.from("service_quotes").insert({
+        tenant_id,
+        created_by: callerId,
+        name: `Alteração do dia de vencimento`,
+        description: `Mudança do dia ${currentDay} para o dia ${proposed_billing_day}.`,
+        amount: 0,
+        billing_type: "billing_change",
+        recurrence_months: null,
+        proposed_billing_day,
+      }).select().single();
+      if (qErr) throw qErr;
+
+      await admin.from("notifications").insert({
+        target_user_id: tenant.owner_id,
+        title: "Nova proposta de faturamento",
+        message: `O administrador propôs alterar seu dia de vencimento de ${currentDay} para ${proposed_billing_day}. Acesse Configurações > Pagamento para aprovar.`,
+        type: "system",
+        created_by: callerId,
+      });
+      await audit("propose_billing_day_change", tenant.owner_id, {
+        quote_id: quote.id, from: currentDay, to: proposed_billing_day,
+      });
+      return json({ success: true, quote });
+    }
+
     if (action === "update_setting") {
       const { key, value } = body;
       const allowed = new Set([
-        "monthly_base_amount",
-        "invoice_closing_day",
         "cloud_monthly_budget_usd",
         "cloud_warning_pct",
         "cloud_critical_pct",
@@ -245,9 +290,6 @@ Deno.serve(async (req) => {
       if (!allowed.has(key)) return json({ error: "invalid setting key" }, 400);
       if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
         return json({ error: "value must be a non-negative number" }, 400);
-      }
-      if (key === "invoice_closing_day" && (value < 1 || value > 28 || !Number.isInteger(value))) {
-        return json({ error: "invoice_closing_day must be integer 1-28" }, 400);
       }
       if ((key === "cloud_warning_pct" || key === "cloud_critical_pct") && value > 100) {
         return json({ error: "percent must be 0-100" }, 400);
