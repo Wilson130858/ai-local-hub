@@ -277,6 +277,31 @@ Deno.serve(async (req) => {
       return json({ success: true, quote });
     }
 
+    if (action === "create_tenant_for_user") {
+      const { user_id, business_name, billing_day } = body;
+      if (!user_id || typeof user_id !== "string") return json({ error: "user_id required" }, 400);
+      if (!business_name || typeof business_name !== "string" || !business_name.trim()) {
+        return json({ error: "business_name required" }, 400);
+      }
+      const day = Number(billing_day);
+      if (!Number.isInteger(day) || day < 1 || day > 28) {
+        return json({ error: "billing_day must be integer 1-28" }, 400);
+      }
+      const { data: existing } = await admin
+        .from("tenants").select("id").eq("owner_id", user_id).maybeSingle();
+      if (existing) return json({ error: "Cliente já possui um negócio" }, 400);
+
+      const { data: tenant, error: tErr } = await admin.from("tenants").insert({
+        owner_id: user_id,
+        business_name: business_name.trim(),
+        billing_day: day,
+      }).select().single();
+      if (tErr) throw tErr;
+
+      await audit("create_tenant_for_user", user_id, { tenant_id: tenant.id, business_name, billing_day: day });
+      return json({ success: true, tenant });
+    }
+
     if (action === "update_setting") {
       const { key, value } = body;
       const allowed = new Set([
