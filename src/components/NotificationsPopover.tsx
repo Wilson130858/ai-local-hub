@@ -135,7 +135,7 @@ export function NotificationsPopover() {
                             {n.title || n.message}
                           </p>
                           {n.title && (
-                            <p className="truncate text-xs text-muted-foreground">{n.message}</p>
+                            <p className="line-clamp-2 text-xs text-muted-foreground">{n.message}</p>
                           )}
                           <p className="mt-0.5 text-[11px] text-muted-foreground">
                             {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: ptBR })}
