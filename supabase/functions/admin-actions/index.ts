@@ -368,6 +368,55 @@ Deno.serve(async (req) => {
       return json({ success: true });
     }
 
+    if (action === "mark_invoice_paid") {
+      const { invoice_id } = body;
+      if (!invoice_id || typeof invoice_id !== "string") return json({ error: "invoice_id required" }, 400);
+      const { data: inv, error: iErr } = await admin
+        .from("invoices")
+        .select("id, tenant_id, total_amount, status")
+        .eq("id", invoice_id)
+        .maybeSingle();
+      if (iErr) throw iErr;
+      if (!inv) return json({ error: "invoice not found" }, 404);
+      if (inv.status === "paid") return json({ error: "Fatura já está marcada como paga" }, 400);
+      if (inv.status === "open") return json({ error: "Fatura ainda está aberta" }, 400);
+      const { error: uErr } = await admin
+        .from("invoices")
+        .update({ status: "paid" })
+        .eq("id", invoice_id);
+      if (uErr) throw uErr;
+
+      const { data: tenant } = await admin
+        .from("tenants").select("owner_id").eq("id", inv.tenant_id).maybeSingle();
+      if (tenant?.owner_id) {
+        const totalStr = ((inv.total_amount ?? 0) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+        await admin.from("notifications").insert({
+          target_user_id: tenant.owner_id,
+          title: "Pagamento confirmado",
+          message: `Sua fatura de R$ ${totalStr} foi marcada como paga. Obrigado!`,
+          type: "system",
+          created_by: callerId,
+        });
+      }
+      await audit("mark_invoice_paid", tenant?.owner_id ?? null, { invoice_id });
+      return json({ success: true });
+    }
+
+    if (action === "close_invoice_now") {
+      const { tenant_id } = body;
+      if (!tenant_id || typeof tenant_id !== "string") return json({ error: "tenant_id required" }, 400);
+      const { data: tenant } = await admin
+        .from("tenants").select("id").eq("id", tenant_id).maybeSingle();
+      if (!tenant) return json({ error: "tenant not found" }, 404);
+      const { data, error } = await admin.functions.invoke("close-invoices", {
+        body: { tenant_id },
+        headers: { Authorization: authHeader },
+      });
+      if (error) return json({ error: error.message }, 500);
+      await audit("close_invoice_now", null, { tenant_id, result: data });
+      return json({ success: true, result: data });
+    }
+
     return json({ error: "Unknown action" }, 400);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "unknown";
