@@ -14,6 +14,9 @@ import { QuoteDialog } from "./QuoteDialog";
 import { QuotesTimeline } from "./QuotesTimeline";
 import type { ServiceQuote } from "@/lib/billing";
 import { toast } from "sonner";
+import { InvoiceHistoryTable, type InvoiceRow } from "@/components/billing/InvoiceHistoryTable";
+import { InvoiceDetailSheet } from "@/components/billing/InvoiceDetailSheet";
+import { CheckCircle2, FileClock } from "lucide-react";
 
 type Props = {
   open: boolean;
@@ -35,6 +38,13 @@ export function UserDetailSheet({ open, onOpenChange, userId, userName, credits,
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  // invoices
+  const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
+  const [invoiceDetailOpen, setInvoiceDetailOpen] = useState(false);
+  const [activeInvoice, setActiveInvoice] = useState<InvoiceRow | null>(null);
+  const [closingNow, setClosingNow] = useState(false);
+  const [markingPaid, setMarkingPaid] = useState<string | null>(null);
+
   // criação de tenant
   const [newBusinessName, setNewBusinessName] = useState("");
   const [newBillingDay, setNewBillingDay] = useState("5");
@@ -51,13 +61,23 @@ export function UserDetailSheet({ open, onOpenChange, userId, userName, credits,
       const day = Number((tenant as { billing_day?: number }).billing_day ?? 5);
       setBillingDay(day);
       setProposedDay(String(day));
-      const { data: qs } = await supabase
-        .from("service_quotes").select("*").eq("tenant_id", tenant.id).order("created_at", { ascending: false });
+      const [{ data: qs }, { data: invs }] = await Promise.all([
+        supabase
+          .from("service_quotes").select("*").eq("tenant_id", tenant.id).order("created_at", { ascending: false }),
+        supabase
+          .from("invoices")
+          .select("id, status, period_start, period_end, due_date, base_amount, extras_amount, total_amount, closed_at")
+          .eq("tenant_id", tenant.id)
+          .neq("status", "open")
+          .order("due_date", { ascending: false }),
+      ]);
       setQuotes((qs ?? []) as ServiceQuote[]);
+      setInvoices((invs ?? []) as InvoiceRow[]);
     } else {
       setTenantId(null);
       setTenantName("");
       setQuotes([]);
+      setInvoices([]);
       setNewBusinessName("");
       setNewBillingDay("5");
     }
@@ -100,6 +120,32 @@ export function UserDetailSheet({ open, onOpenChange, userId, userName, credits,
     if (error) return toast.error(error.message);
     if ((data as { error?: string })?.error) return toast.error((data as { error: string }).error);
     toast.success("Negócio criado para o cliente");
+    load();
+  };
+
+  const closeInvoiceNow = async () => {
+    if (!tenantId) return;
+    if (!confirm("Fechar a fatura atual agora? Isso materializa os itens e abre a próxima.")) return;
+    setClosingNow(true);
+    const { data, error } = await supabase.functions.invoke("admin-actions", {
+      body: { action: "close_invoice_now", tenant_id: tenantId },
+    });
+    setClosingNow(false);
+    if (error) return toast.error(error.message);
+    if ((data as { error?: string })?.error) return toast.error((data as { error: string }).error);
+    toast.success("Fatura fechada");
+    load();
+  };
+
+  const markPaid = async (invoiceId: string) => {
+    setMarkingPaid(invoiceId);
+    const { data, error } = await supabase.functions.invoke("admin-actions", {
+      body: { action: "mark_invoice_paid", invoice_id: invoiceId },
+    });
+    setMarkingPaid(null);
+    if (error) return toast.error(error.message);
+    if ((data as { error?: string })?.error) return toast.error((data as { error: string }).error);
+    toast.success("Fatura marcada como paga");
     load();
   };
 
@@ -205,6 +251,49 @@ export function UserDetailSheet({ open, onOpenChange, userId, userName, credits,
                 ) : (
                   <QuotesTimeline quotes={quotes} onChanged={load} />
                 )}
+
+                <div className="space-y-2 rounded-md border border-border p-4">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <FileClock className="h-4 w-4 text-muted-foreground" />
+                      <Label className="text-sm font-medium">Histórico de faturas</Label>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={closeInvoiceNow} disabled={closingNow}>
+                      {closingNow ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                      Fechar fatura agora
+                    </Button>
+                  </div>
+                  <InvoiceHistoryTable
+                    invoices={invoices}
+                    onOpen={(inv) => { setActiveInvoice(inv); setInvoiceDetailOpen(true); }}
+                    emptyText="Nenhuma fatura fechada ainda."
+                  />
+                  {invoices.some((i) => i.status === "closed") && (
+                    <div className="space-y-1 pt-1 text-xs text-muted-foreground">
+                      Marcar manualmente como paga:
+                      <div className="flex flex-wrap gap-1">
+                        {invoices.filter((i) => i.status === "closed").slice(0, 3).map((i) => (
+                          <Button
+                            key={i.id}
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-[11px]"
+                            onClick={() => markPaid(i.id)}
+                            disabled={markingPaid === i.id}
+                          >
+                            {markingPaid === i.id ? (
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="mr-1 h-3 w-3" />
+                            )}
+                            {formatCredits(i.total_amount)} • venc. {i.due_date.split("-").reverse().join("/")}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <QuoteDialog
                   open={dialogOpen}
                   onOpenChange={setDialogOpen}
@@ -216,6 +305,12 @@ export function UserDetailSheet({ open, onOpenChange, userId, userName, credits,
             )}
           </TabsContent>
         </Tabs>
+
+        <InvoiceDetailSheet
+          open={invoiceDetailOpen}
+          onOpenChange={setInvoiceDetailOpen}
+          invoice={activeInvoice}
+        />
       </SheetContent>
     </Sheet>
   );
