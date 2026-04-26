@@ -529,7 +529,7 @@ export type Database = {
       notification_type: "system" | "alert"
       profile_status: "pending" | "approved" | "rejected"
       quote_billing_type: "recurring" | "lifetime" | "billing_change"
-      quote_status: "pending" | "accepted" | "declined"
+      quote_status: "pending" | "accepted" | "declined" | "revoked"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -665,7 +665,7 @@ export const Constants = {
       notification_type: ["system", "alert"],
       profile_status: ["pending", "approved", "rejected"],
       quote_billing_type: ["recurring", "lifetime", "billing_change"],
-      quote_status: ["pending", "accepted", "declined"],
+      quote_status: ["pending", "accepted", "declined", "revoked"],
     },
   },
 } as const
