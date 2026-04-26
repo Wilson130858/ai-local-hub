@@ -1,46 +1,110 @@
 ## Objetivo
 
-Adicionar uma aba **"Faturamento"** dedicada no painel `/admin`, ao lado de Usuários, Créditos, Notificações e Configurações, centralizando toda a gestão financeira por cliente sem precisar abrir o sheet lateral de cada usuário.
+1. **Fechamento automático** de faturas no dia de cobrança de cada cliente — materializa os itens, fecha o ciclo, abre a próxima e notifica o cliente.
+2. **Histórico de faturas** acessível pelo cliente, com itens detalhados e status (aberta / fechada / paga / atrasada).
 
-## O que a nova aba terá
+---
 
-**1. Visão geral (cards no topo)**
-- Receita prevista do mês (soma de todos os serviços ativos + prorratas).
-- Quantidade de propostas pendentes de aprovação.
-- Quantidade de clientes com dia de cobrança nos próximos 7 dias.
+## 1. Fechamento automático (cron diário)
 
-**2. Tabela "Clientes & Faturamento"**
-Lista todos os tenants com colunas:
-- Cliente (nome do negócio + dono).
-- Dia de cobrança atual.
-- Serviços ativos (contagem + total mensal).
-- Status (em dia, proposta pendente, prorrata no mês).
-- Ações: **Gerenciar** (abre o `UserDetailSheet` já direto na aba "Faturamento") e **+ Serviço** (atalho que abre o `QuoteDialog` direto).
+### Regra de negócio
+Para cada tenant, todo dia às 03:00 (horário de São Paulo), o sistema verifica se hoje é o `billing_day` daquele tenant. Se for:
 
-**3. Tabela "Propostas pendentes" (global)**
-Lista todos os `service_quotes` com `status = pending` de qualquer cliente, mostrando: cliente, nome do serviço, valor, tipo (recorrente/único/mudança de dia), data de envio. Permite ao admin acompanhar o que está aguardando aprovação sem precisar entrar cliente por cliente.
+- Localiza a invoice `open` do tenant (ou cria uma se não existir).
+- Materializa `invoice_items` a partir dos `service_quotes` aceitos ativos no período (mesma lógica já usada em `computeCurrentInvoice`):
+  - Mês de aceite com `proration_amount > 0` → item proporcional.
+  - Demais casos → valor cheio.
+- Calcula `base_amount`, `extras_amount`, `total_amount`.
+- Marca a invoice como `closed`, define `closed_at = now()`.
+- Cria a próxima invoice `open` com `period_start = hoje`, `period_end = próximo billing_day - 1`, `due_date = próximo billing_day`.
+- Insere notificação para o dono do tenant: "Sua fatura de R$ X foi fechada e vence em DD/MM".
 
-**4. Filtros**
-- Busca por nome de cliente.
-- Filtro por status (todos / com pendência / sem serviços / com prorrata ativa).
+Idempotência: se já existe invoice `closed` cobrindo o `period_end = ontem` para o tenant, pula. Evita cobrança duplicada caso o cron rode duas vezes.
 
-## Mudanças nos arquivos
+### Status "atrasada" (overdue)
+Não é necessário um novo valor de enum — é derivado: invoice com `status = 'closed'` e `due_date < hoje` é apresentada como "Atrasada" na UI. A mesma rotina diária pode disparar uma notificação quando a invoice ultrapassa o vencimento (ex.: 1 dia, 7 dias).
 
-**`src/pages/Admin.tsx`**
-- Adicionar `<TabsTrigger value="billing">Faturamento</TabsTrigger>` entre "Usuários" e "Créditos".
-- Criar `<TabsContent value="billing">` renderizando o novo componente `BillingOverview`.
-- Manter o ícone `Receipt` na linha do usuário (atalho rápido) — não remover.
-- Atualizar o aviso na aba "Configurações" para apontar para a nova aba "Faturamento" em vez da aba "Usuários".
+### Implementação técnica
+- Nova edge function **`close-invoices`** (sem JWT, validada por header `x-cron-secret`).
+- Habilitar `pg_cron` + `pg_net` e agendar via SQL (ferramenta `insert`, não migration — contém a anon key e o secret).
+- Schedule: `0 6 * * *` UTC (= 03:00 BRT).
+- Migration: índice `(tenant_id, status)` em `invoices` para a busca da invoice aberta + novo secret `CRON_SECRET`.
 
-**`src/components/admin/BillingOverview.tsx` (novo)**
-- Carrega `tenants` (com `billing_day`, `business_name`, `owner_id`) + join com `profiles` para nome do dono.
-- Carrega todos os `service_quotes` para calcular agregados por tenant (serviços ativos via `isQuoteActiveInPeriod`, total mensal, prorratas do mês corrente).
-- Renderiza cards de resumo, tabela de clientes e tabela de propostas pendentes globais.
-- Reaproveita `UserDetailSheet` (com prop opcional `defaultTab="billing"`) e `QuoteDialog` para as ações.
+### Trigger manual (admin)
+Botão "Fechar fatura agora" no `UserDetailSheet` aba Faturamento, que chama a mesma função com `tenant_id` específico. Útil para testes e correções pontuais.
 
-**`src/components/admin/UserDetailSheet.tsx`**
-- Adicionar prop opcional `defaultTab?: "summary" | "billing"` (default `"summary"`) e passar ao `<Tabs defaultValue={defaultTab}>`.
+---
 
-## Não faz parte deste plano
-- Mudar a lógica de cálculo de prorrata ou a estrutura do banco — tudo já está pronto em `src/lib/billing.ts` e nas migrações.
-- Mexer na visão do cliente (`/configuracoes`).
+## 2. Histórico de faturas (cliente)
+
+### UI
+Nova rota **`/faturas`** acessível pelo menu lateral (entre Leads e Configurações), apenas para usuários `approved`.
+
+Layout:
+```text
+┌──────────────────────────────────────────────────┐
+│ Fatura atual (CurrentInvoiceCard já existente)   │
+├──────────────────────────────────────────────────┤
+│ Histórico                                        │
+│ ┌──────────────────────────────────────────────┐ │
+│ │ Período   Vencimento  Total    Status   →   │ │
+│ │ Mar/26    05/04       R$ 240   Paga     →   │ │
+│ │ Fev/26    05/03       R$ 240   Paga     →   │ │
+│ │ Jan/26    05/02       R$ 180   Atrasada →   │ │
+│ └──────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────┘
+```
+
+Clicar numa linha abre um Sheet com:
+- Cabeçalho (período, vencimento, status, total)
+- Lista de `invoice_items` (descrição + valor + tipo)
+- Botão "Baixar comprovante" (gera PDF simples client-side — opcional nesta fase, ou já implementado com `window.print()` numa view dedicada).
+
+### Status renderizados
+- `open` → "Aberta" (azul)
+- `closed` + `due_date >= hoje` → "A vencer" (amarelo)
+- `closed` + `due_date < hoje` → "Atrasada" (vermelho)
+- `paid` → "Paga" (verde)
+
+### Componentes novos
+- `src/pages/Faturas.tsx`
+- `src/components/billing/InvoiceHistoryTable.tsx`
+- `src/components/billing/InvoiceDetailSheet.tsx`
+- Helper `getInvoiceDisplayStatus(invoice)` em `src/lib/billing.ts`.
+
+### Visão admin
+Adicionar a mesma listagem de invoices (filtrada pelo tenant) na aba Faturamento do `UserDetailSheet`, abaixo da fatura atual. Permite ao admin ver o histórico de qualquer cliente e marcar manualmente como "paga" (botão que chama `admin-actions` com nova action `mark_invoice_paid`).
+
+---
+
+## Mudanças resumidas
+
+**Banco (migration):**
+- Índice `idx_invoices_tenant_status` em `invoices(tenant_id, status)`.
+
+**Banco (insert tool — contém secrets):**
+- Habilitar `pg_cron`, `pg_net`.
+- Agendar `cron.schedule('close-invoices-daily', '0 6 * * *', ...)`.
+
+**Secrets:**
+- `CRON_SECRET` (gerado e salvo via `add_secret`).
+
+**Edge functions:**
+- `close-invoices/index.ts` (nova) — fecha faturas e notifica.
+- `admin-actions/index.ts` — adicionar action `mark_invoice_paid` e `close_invoice_now`.
+
+**Frontend:**
+- `src/pages/Faturas.tsx` (nova rota).
+- `src/components/billing/InvoiceHistoryTable.tsx`, `InvoiceDetailSheet.tsx` (novos).
+- `src/lib/billing.ts` — helper `getInvoiceDisplayStatus`.
+- `src/App.tsx` — registrar rota `/faturas`.
+- `src/components/AppSidebar.tsx` — link "Faturas".
+- `src/components/admin/UserDetailSheet.tsx` — bloco de histórico + botões "Fechar agora" e "Marcar paga".
+
+---
+
+## Notas e limites desta etapa
+
+- Cobrança real (cartão/PIX/boleto) **não entra agora** — o fluxo termina em "fatura fechada e visível ao cliente". A integração Stripe é a etapa seguinte e usará o evento de fatura fechada como gatilho natural.
+- O cálculo de itens segue a mesma lógica já validada em `computeCurrentInvoice`, então não muda o que o cliente já vê hoje — apenas persiste no banco quando o ciclo fecha.
+- Idempotência forte garante que rodar o cron várias vezes (ou clicar manualmente) não duplica faturas.
