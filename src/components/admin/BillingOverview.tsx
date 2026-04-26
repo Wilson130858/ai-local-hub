@@ -245,7 +245,7 @@ export function BillingOverview() {
                         {formatCredits(row.total)}
                         {row.prorataMonth > 0 && (
                           <span className="ml-1 text-[10px] text-muted-foreground">
-                            (+{formatCredits(row.prorataMonth)} prorrata)
+                            ({formatCredits(row.prorataMonth)} prorrata)
                           </span>
                         )}
                       </TableCell>
