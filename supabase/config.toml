@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.cloud-usage-check]
 verify_jwt = false
+
+[functions.close-invoices]
+verify_jwt = false
