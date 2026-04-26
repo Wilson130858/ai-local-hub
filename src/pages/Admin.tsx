@@ -254,6 +254,32 @@ export default function Admin() {
     const r = await callAdmin("reset_password", { email });
     if (r) toast.success(`Email de redefinição enviado para ${email}`);
   };
+  const openSetPassword = (p: Profile) => {
+    setPwdUser(p);
+    setPwdValue("");
+    setPwdShow(false);
+    setPwdOpen(true);
+  };
+  const generateRandomPwd = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
+    const arr = crypto.getRandomValues(new Uint8Array(14));
+    setPwdValue(Array.from(arr, (b) => chars[b % chars.length]).join(""));
+    setPwdShow(true);
+  };
+  const submitSetPassword = async () => {
+    if (!pwdUser) return;
+    if (pwdValue.length < 6) return toast.error("A senha deve ter pelo menos 6 caracteres");
+    if (pwdValue.length > 128) return toast.error("Senha muito longa");
+    setPwdSaving(true);
+    const r = await callAdmin("set_password", { user_id: pwdUser.id, password: pwdValue });
+    setPwdSaving(false);
+    if (r) {
+      toast.success(`Senha de ${pwdUser.full_name ?? "usuário"} atualizada`);
+      setPwdOpen(false);
+      setPwdUser(null);
+      setPwdValue("");
+    }
+  };
   const impersonate = async (userId: string) => {
     const r = await callAdmin("impersonate_user", { user_id: userId });
     const link = (r as { action_link?: string } | null)?.action_link;
