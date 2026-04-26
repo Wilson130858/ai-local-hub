@@ -1,79 +1,51 @@
+## Visão geral
 
-# Monitoramento de custo Lovable Cloud no painel Admin
+Hoje o faturamento é meio-global meio-individual: a **mensalidade base** e o **dia de fechamento** vêm de `app_settings` (valem pra todos), e só os "orçamentos extras" (`service_quotes`) são individuais. Vamos eliminar essa parte global e tornar **tudo** per-tenant: cada cliente tem o próprio dia de cobrança e a própria carteira de serviços. Também adicionamos **cobrança proporcional (prorata)** quando um serviço é aceito no meio do ciclo.
 
-Adicionar visibilidade do consumo da plataforma para você antecipar quando o saldo grátis de US$ 25/mês está perto de estourar, com limites configuráveis e notificação automática.
+A boa notícia: a tabela `service_quotes` já é per-tenant e o fluxo "admin propõe → cliente aprova/recusa" já existe via `decide_quote()`. Vamos **estender** esse fluxo, não recriar.
 
-## O que será construído
+## O que muda
 
-### 1. Configurações (aba Configurações do Admin)
+### Banco de dados (1 migration)
 
-Três novos campos editáveis (salvos em `app_settings`):
+1. **`tenants.billing_day` (int 1-28, default 5)** — dia de vencimento individual.
+2. **`service_quotes.proration_amount` (int, nullable)** — valor prorata calculado no aceite, em centavos.
+3. **`service_quotes` ganha tipo `billing_change`** (alteração de dia de cobrança) além de `recurring`/`lifetime`. Campo extra: `proposed_billing_day` (int nullable).
+4. **Atualizar `decide_quote()`**: quando aceito,
+   - se `billing_type IN ('recurring','lifetime')` e estamos a <30 dias do próximo vencimento → calcula prorata `(amount / 30) * dias_restantes`, grava em `proration_amount`;
+   - se `billing_type = 'billing_change'` → aplica `tenants.billing_day = proposed_billing_day`.
+5. **Remover** chaves globais `monthly_base_amount` e `closing_day` de `app_settings` (mantendo as de cloud-usage). A "mensalidade base" deixa de existir como conceito global — passa a ser apenas serviços recorrentes per-tenant.
 
-- **Saldo mensal de Cloud (USD)** — padrão `25` (o saldo grátis).
-- **Limite de atenção (% do saldo)** — padrão `60`. Pinta o card de amarelo quando o gasto projetado passar disso.
-- **Limite crítico (% do saldo)** — padrão `85`. Pinta de vermelho e dispara notificação.
+### Painel Admin (`/admin`)
 
-### 2. Card "Consumo Lovable Cloud" no painel Admin
+- **Aba "Faturamento" do Admin**: remover os inputs globais de "mensalidade base" e "dia de fechamento" (linhas 700-720 de `Admin.tsx`).
+- **`UserDetailSheet`** (já existe, abre ao clicar no cliente) ganha na aba **Faturamento**:
+  - Campo "Dia de cobrança" (1-28) com botão "Propor alteração" → cria um `service_quote` do tipo `billing_change` (vai pra aprovação do cliente, não aplica direto).
+  - Lista de serviços ativos do cliente (já existe via `QuotesTimeline`).
+  - Botão "Adicionar serviço" (já existe via `QuoteDialog`) — sem mudanças visuais grandes, só passa a mostrar uma nota: *"O cliente precisa aprovar. Se aceitar antes do vencimento, será cobrado proporcionalmente nesta fatura."*
 
-Card destacado no topo da aba "Visão Geral" do `/admin` mostrando, **da plataforma inteira**:
+### Painel do Cliente (`/configuracoes` aba Pagamentos)
 
-- **Gasto estimado do mês corrente em USD** (com barra de progresso colorida vs limite).
-- **Projeção para o fim do mês** (extrapolação linear do ritmo atual).
-- **Breakdown** por tipo de uso:
-  - Leads ingeridos no mês (volume × custo unitário estimado).
-  - Invocações de edge function (admin-actions + ingest-lead).
-  - Linhas em tabelas de alto crescimento (`leads`, `notifications`, `audit_logs`).
-- **Status visual**: verde (ok) / amarelo (atenção) / vermelho (crítico).
-- Botão **"Ver detalhes"** abrindo um Sheet com gráfico de leads/dia dos últimos 30 dias.
+- **`CurrentInvoiceCard`**: remover linha "Mensalidade base" (não existe mais). Total = soma dos serviços ativos + prorata do mês corrente.
+- **`PendingQuoteCard`**: 
+  - Para serviços normais: mostrar **preview do prorata** ("Se aceitar hoje, R$ XX,XX serão cobrados nesta fatura referente a N dias restantes").
+  - Para `billing_change`: card distinto ("O administrador propôs alterar seu dia de vencimento de **5** para **15**") com Aprovar/Recusar.
+- **`computeCurrentInvoice`** em `src/lib/billing.ts`: passa a incluir a `proration_amount` na fatura do mês em que o quote foi aceito (apenas no primeiro mês).
 
-### 3. Notificação automática quando estourar limite
+### Edge function
 
-Quando a projeção mensal cruza o limite de atenção ou crítico **pela primeira vez no mês**:
+- `admin-actions`: remover handler de salvar `monthly_base_amount`/`closing_day` globais. Adicionar handler `propose_billing_day_change` que cria um `service_quote` tipo `billing_change`.
+- Cálculo de prorata fica no `decide_quote()` (Postgres), não na edge function — atomicidade.
 
-- Cria uma `notification` para todos os admins com título tipo "Atenção: consumo Cloud em 62% do saldo" e mensagem com a projeção.
-- Marca em `app_settings` que o aviso daquele nível já foi disparado naquele mês (evita spam).
-- Reseta no início de cada mês.
+## Diretrizes técnicas
 
-A verificação roda a cada hora via cron (`pg_cron` + `pg_net`) chamando uma nova edge function `cloud-usage-check`.
+- **Sem novas tabelas**: reaproveitamos `service_quotes` para propostas de mudança de dia, evitando duplicação. Campo `billing_type='billing_change'` distingue.
+- Prorata em centavos: `floor((amount * dias_restantes) / 30)` para evitar arredondamento pra baixo do cliente.
+- Se aceito no mesmo dia do vencimento ou depois → prorata = 0 (entra cheio só no próximo ciclo).
+- `billing_day` limitado a 1-28 pra evitar problemas com fevereiro.
+- RLS de `service_quotes` já cobre o novo tipo (admin gerencia, owner vê).
 
-## Como o cálculo de custo funciona
+## Fora do escopo (deixar como está)
 
-Não temos acesso direto à API de billing do Lovable Cloud, então usamos uma **estimativa baseada em uso observável** com coeficientes configuráveis:
-
-- `cost_per_1k_leads` (USD) — padrão `0.20`
-- `cost_per_1k_function_invocations` (USD) — padrão `0.10`
-- `cost_per_gb_storage_month` (USD) — padrão `0.125`
-
-Tudo armazenado em `app_settings` e editável pelo admin pra você calibrar conforme o gasto real for aparecendo no Lovable. A estimativa é claramente rotulada como "estimada" na UI.
-
-## Detalhes técnicos
-
-**Migration (schema)**: nenhuma tabela nova — só seeds em `app_settings` para as chaves novas:
-- `cloud_monthly_budget_usd`, `cloud_warning_pct`, `cloud_critical_pct`
-- `cost_per_1k_leads`, `cost_per_1k_function_invocations`, `cost_per_gb_storage_month`
-- `cloud_alert_state` (jsonb com `{month, warning_sent, critical_sent}`)
-
-**Edge function nova**: `supabase/functions/cloud-usage-check/index.ts`
-- Conta `leads` do mês, invocações via `function_edge_logs` (analytics), tamanho aproximado das tabelas via `pg_total_relation_size`.
-- Calcula custo estimado e projeção.
-- Compara com limites e dispara notificações para todos admins se cruzou um nível novo.
-- Atualiza `cloud_alert_state`.
-
-**Cron job** (via insert tool, não migração — contém URL/anon key):
-- `cloud_usage_hourly_check` rodando de hora em hora.
-
-**Frontend novo**:
-- `src/components/admin/CloudUsageCard.tsx` — card principal.
-- `src/components/admin/CloudUsageDetailSheet.tsx` — gráfico e breakdown detalhado.
-- `src/lib/cloud-usage.ts` — funções de cálculo (custo estimado, projeção mensal, helpers de formatação USD).
-
-**Frontend editado**:
-- `src/pages/Admin.tsx` — montar o `CloudUsageCard` no topo da aba Visão Geral; adicionar os 6 novos campos na aba Configurações.
-
-**RLS**: tudo usa `is_admin()` que já existe — só admins veem o card e editam os limites.
-
-## Fora do escopo
-
-- Integração real com a API de billing do Lovable (não é exposta).
-- Bloqueio automático de ingest quando estourar (só alerta — você decide o que fazer).
-- Histórico mensal persistido (mostramos só o mês corrente; histórico fica para depois se quiser).
+- Geração automática de faturas mensais (`invoices`/`invoice_items`) — hoje `CurrentInvoiceCard` calcula em runtime, mantemos assim.
+- Histórico de mudanças de dia de cobrança — o próprio `service_quotes` serve como log.

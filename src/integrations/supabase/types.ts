@@ -364,6 +364,8 @@ export type Database = {
           description: string | null
           id: string
           name: string
+          proposed_billing_day: number | null
+          proration_amount: number | null
           recurrence_months: number | null
           status: Database["public"]["Enums"]["quote_status"]
           tenant_id: string
@@ -377,6 +379,8 @@ export type Database = {
           description?: string | null
           id?: string
           name: string
+          proposed_billing_day?: number | null
+          proration_amount?: number | null
           recurrence_months?: number | null
           status?: Database["public"]["Enums"]["quote_status"]
           tenant_id: string
@@ -390,6 +394,8 @@ export type Database = {
           description?: string | null
           id?: string
           name?: string
+          proposed_billing_day?: number | null
+          proration_amount?: number | null
           recurrence_months?: number | null
           status?: Database["public"]["Enums"]["quote_status"]
           tenant_id?: string
@@ -407,6 +413,7 @@ export type Database = {
       tenants: {
         Row: {
           ai_config: Json
+          billing_day: number
           business_name: string
           created_at: string
           google_calendar_token: string | null
@@ -416,6 +423,7 @@ export type Database = {
         }
         Insert: {
           ai_config?: Json
+          billing_day?: number
           business_name: string
           created_at?: string
           google_calendar_token?: string | null
@@ -425,6 +433,7 @@ export type Database = {
         }
         Update: {
           ai_config?: Json
+          billing_day?: number
           business_name?: string
           created_at?: string
           google_calendar_token?: string | null
@@ -519,7 +528,7 @@ export type Database = {
       lead_status: "pendente" | "agendado" | "cancelado"
       notification_type: "system" | "alert"
       profile_status: "pending" | "approved" | "rejected"
-      quote_billing_type: "recurring" | "lifetime"
+      quote_billing_type: "recurring" | "lifetime" | "billing_change"
       quote_status: "pending" | "accepted" | "declined"
     }
     CompositeTypes: {
@@ -655,7 +664,7 @@ export const Constants = {
       lead_status: ["pendente", "agendado", "cancelado"],
       notification_type: ["system", "alert"],
       profile_status: ["pending", "approved", "rejected"],
-      quote_billing_type: ["recurring", "lifetime"],
+      quote_billing_type: ["recurring", "lifetime", "billing_change"],
       quote_status: ["pending", "accepted", "declined"],
     },
   },
