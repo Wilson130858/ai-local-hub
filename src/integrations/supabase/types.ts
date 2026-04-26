@@ -517,6 +517,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      install_close_invoices_cron: {
+        Args: { _cron_secret: string; _function_url: string }
+        Returns: string
+      }
       is_admin: { Args: never; Returns: boolean }
       redeem_voucher: { Args: { _code: string }; Returns: Json }
     }
