@@ -125,10 +125,6 @@ export default function Admin() {
   const [pwdShow, setPwdShow] = useState(false);
   const [pwdSaving, setPwdSaving] = useState(false);
 
-  // app settings
-  const [baseAmountInput, setBaseAmountInput] = useState("99,00");
-  const [closingDayInput, setClosingDayInput] = useState("5");
-  const [savingSettings, setSavingSettings] = useState(false);
   // cloud cost settings
   const [cloudBudget, setCloudBudget] = useState("25");
   const [cloudWarning, setCloudWarning] = useState("60");
@@ -141,9 +137,6 @@ export default function Admin() {
   const loadSettings = async () => {
     const { data } = await supabase.from("app_settings").select("key, value");
     const map = new Map((data ?? []).map((r) => [r.key, r.value]));
-    const base = Number(map.get("monthly_base_amount") ?? 0);
-    setBaseAmountInput((base / 100).toFixed(2).replace(".", ","));
-    setClosingDayInput(String(map.get("invoice_closing_day") ?? 5));
     const numOr = (k: string, fb: number) => {
       const v = map.get(k);
       const n = typeof v === "number" ? v : Number(v);
@@ -158,18 +151,6 @@ export default function Admin() {
   };
 
   useEffect(() => { loadSettings(); }, []);
-
-  const saveSettings = async () => {
-    const cents = parseReaisToCents(baseAmountInput);
-    if (cents === null || cents < 0) return toast.error("Mensalidade inválida");
-    const day = parseInt(closingDayInput);
-    if (!day || day < 1 || day > 28) return toast.error("Dia deve ser entre 1 e 28");
-    setSavingSettings(true);
-    const r1 = await callAdmin("update_setting", { key: "monthly_base_amount", value: cents });
-    const r2 = r1 ? await callAdmin("update_setting", { key: "invoice_closing_day", value: day }) : null;
-    setSavingSettings(false);
-    if (r1 && r2) toast.success("Configurações salvas");
-  };
 
   const saveCloudSettings = async () => {
     const parse = (s: string) => {
