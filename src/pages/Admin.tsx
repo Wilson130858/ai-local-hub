@@ -521,10 +521,7 @@ export default function Admin() {
                                 >
                                   <Receipt className="h-4 w-4" />
                                 </Button>
-                                <Button size="sm" variant="ghost" onClick={() => {
-                                  const email = prompt("Email do usuário para redefinir senha:");
-                                  if (email) resetPassword(email);
-                                }} title="Reset senha">
+                                <Button size="sm" variant="ghost" onClick={() => openSetPassword(p)} title="Definir nova senha">
                                   <KeyRound className="h-4 w-4" />
                                 </Button>
                                 <AlertDialog>
