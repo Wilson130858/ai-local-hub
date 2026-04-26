@@ -92,7 +92,11 @@ export function NotificationsPopover() {
                 </p>
               </div>
             </div>
-            <div className="p-4 text-sm leading-relaxed whitespace-pre-wrap">{selected.message}</div>
+            <ScrollArea className="h-[360px]">
+              <div className="p-4 text-sm leading-relaxed whitespace-pre-wrap break-words">
+                {selected.message}
+              </div>
+            </ScrollArea>
           </div>
         ) : (
           <div className="flex flex-col">
@@ -109,7 +113,7 @@ export function NotificationsPopover() {
                 </Button>
               )}
             </div>
-            <ScrollArea className="max-h-[420px]">
+            <ScrollArea className="h-[420px]">
               {items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
                   <Inbox className="h-6 w-6 text-muted-foreground" />
@@ -131,7 +135,7 @@ export function NotificationsPopover() {
                             {n.title || n.message}
                           </p>
                           {n.title && (
-                            <p className="truncate text-xs text-muted-foreground">{n.message}</p>
+                            <p className="line-clamp-2 text-xs text-muted-foreground">{n.message}</p>
                           )}
                           <p className="mt-0.5 text-[11px] text-muted-foreground">
                             {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: ptBR })}
