@@ -847,6 +847,36 @@ export default function Admin() {
               >
                 <RefreshCw className="mr-2 h-4 w-4" /> Gerar senha aleatória
               </Button>
+              {pwdValue.length > 0 && (() => {
+                const pwd = pwdValue;
+                let score = 0;
+                if (pwd.length >= 8) score++;
+                if (pwd.length >= 12) score++;
+                if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) score++;
+                if (/\d/.test(pwd)) score++;
+                if (/[^A-Za-z0-9]/.test(pwd)) score++;
+                const common = /^(?:123456|senha|password|qwerty|admin|111111|123123|abc123)/i.test(pwd);
+                if (common) score = Math.min(score, 1);
+                const levels = [
+                  { label: "Muito fraca", color: "bg-destructive", width: "20%" },
+                  { label: "Fraca", color: "bg-destructive", width: "40%" },
+                  { label: "Razoável", color: "bg-yellow-500", width: "60%" },
+                  { label: "Boa", color: "bg-yellow-500", width: "80%" },
+                  { label: "Forte", color: "bg-green-500", width: "100%" },
+                ];
+                const lvl = levels[Math.max(0, Math.min(4, score - 1))] ?? levels[0];
+                return (
+                  <div className="space-y-1.5">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div className={`h-full ${lvl.color} transition-all`} style={{ width: lvl.width }} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Força: <span className="font-medium text-foreground">{lvl.label}</span>
+                      {score < 4 && " — recomendado: 12+ caracteres com maiúsculas, números e símbolos."}
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setPwdOpen(false)} disabled={pwdSaving}>
