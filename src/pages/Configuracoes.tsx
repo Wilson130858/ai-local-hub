@@ -34,8 +34,7 @@ const Configuracoes = () => {
   const [voucherCode, setVoucherCode] = useState("");
   const [redeeming, setRedeeming] = useState(false);
   const [quotes, setQuotes] = useState<ServiceQuote[]>([]);
-  const [baseAmount, setBaseAmount] = useState(0);
-  const [closingDay, setClosingDay] = useState(5);
+  const [billingDay, setBillingDay] = useState(5);
 
   useEffect(() => {
     if (!user) return;
@@ -45,14 +44,14 @@ const Configuracoes = () => {
 
   const loadBilling = async () => {
     if (!user || isAdmin) return;
-    const [{ data: settings }, { data: tenants }] = await Promise.all([
-      supabase.from("app_settings").select("key, value"),
-      supabase.from("tenants").select("id").eq("owner_id", user.id),
-    ]);
-    const map = new Map((settings ?? []).map((r) => [r.key, r.value]));
-    setBaseAmount(Number(map.get("monthly_base_amount") ?? 0));
-    setClosingDay(Number(map.get("invoice_closing_day") ?? 5));
+    const { data: tenants } = await supabase
+      .from("tenants")
+      .select("id, billing_day")
+      .eq("owner_id", user.id);
     const tenantIds = (tenants ?? []).map((t) => t.id);
+    if (tenants && tenants.length > 0) {
+      setBillingDay(Number((tenants[0] as { billing_day?: number }).billing_day ?? 5));
+    }
     if (tenantIds.length === 0) { setQuotes([]); return; }
     const { data: qs } = await supabase
       .from("service_quotes").select("*").in("tenant_id", tenantIds).order("created_at", { ascending: false });
@@ -134,8 +133,7 @@ const Configuracoes = () => {
           <TabsContent value="pagamento" className="mt-6 space-y-4">
             {/* Fatura atual */}
             <CurrentInvoiceCard
-              baseAmount={baseAmount}
-              closingDay={closingDay}
+              billingDay={billingDay}
               acceptedQuotes={quotes.filter((q) => q.status === "accepted")}
             />
 
@@ -152,7 +150,7 @@ const Configuracoes = () => {
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2">
                   {quotes.filter((q) => q.status === "pending").map((q) => (
-                    <PendingQuoteCard key={q.id} quote={q} onDecided={loadBilling} />
+                    <PendingQuoteCard key={q.id} quote={q} billingDay={billingDay} onDecided={loadBilling} />
                   ))}
                 </div>
               )}
