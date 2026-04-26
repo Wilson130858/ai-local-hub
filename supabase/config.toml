@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.close-invoices]
 verify_jwt = false
+
+[functions.install-cron]
+verify_jwt = false

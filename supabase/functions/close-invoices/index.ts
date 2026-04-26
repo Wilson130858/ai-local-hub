@@ -281,7 +281,11 @@ Deno.serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
     const cronHeader = req.headers.get("x-cron-secret");
-    const isCron = !!CRON_SECRET && cronHeader === CRON_SECRET;
+    const authHeaderRaw = req.headers.get("Authorization") ?? "";
+    // Aceita cron via x-cron-secret OU via Authorization Bearer = CRON_SECRET (mais simples para pg_cron)
+    const isCron =
+      !!CRON_SECRET &&
+      (cronHeader === CRON_SECRET || authHeaderRaw === `Bearer ${CRON_SECRET}`);
 
     let isAdmin = false;
     if (!isCron) {

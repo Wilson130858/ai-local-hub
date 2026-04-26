@@ -22,6 +22,7 @@ import { VoucherDialog, type VoucherDialogItem } from "@/components/admin/Vouche
 import { UserDetailSheet } from "@/components/admin/UserDetailSheet";
 import { CloudUsageCard } from "@/components/admin/CloudUsageCard";
 import { BillingOverview } from "@/components/admin/BillingOverview";
+import { InvoiceCronCard } from "@/components/admin/InvoiceCronCard";
 
 type ProfileStatus = "pending" | "approved" | "rejected";
 type Profile = {
@@ -673,6 +674,7 @@ export default function Admin() {
           <TabsContent value="settings">
             <div className="grid gap-6">
               <CloudUsageCard />
+              <InvoiceCronCard />
               <p className="rounded-md border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
                 As configurações de faturamento (dia de cobrança e serviços) agora são individuais por cliente.
                 Acesse a aba "Faturamento" para a visão consolidada ou abra um cliente específico.
