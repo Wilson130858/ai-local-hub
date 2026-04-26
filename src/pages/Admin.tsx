@@ -667,43 +667,11 @@ export default function Admin() {
 
           {/* SETTINGS */}
           <TabsContent value="settings">
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <SettingsIcon className="h-4 w-4" /> Configurações de Faturamento
-                </CardTitle>
-                <CardDescription>Definições globais aplicadas a todos os clientes</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Mensalidade base padrão (R$)</Label>
-                  <Input
-                    inputMode="decimal"
-                    value={baseAmountInput}
-                    onChange={(e) => setBaseAmountInput(e.target.value)}
-                    placeholder="99,00"
-                  />
-                  <p className="text-xs text-muted-foreground">Valor cobrado mensalmente como base da fatura.</p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Dia de fechamento da fatura</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={28}
-                    value={closingDayInput}
-                    onChange={(e) => setClosingDayInput(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">Dia do mês (1-28) em que a próxima fatura vence.</p>
-                </div>
-                <Button onClick={saveSettings} disabled={savingSettings}>
-                  {savingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                  Salvar
-                </Button>
-              </CardContent>
-              </Card>
-
+            <div className="grid gap-6">
+              <p className="rounded-md border border-dashed border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                As configurações de faturamento (dia de cobrança e serviços) agora são individuais por cliente.
+                Acesse o cliente na aba "Usuários" para gerenciar.
+              </p>
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
