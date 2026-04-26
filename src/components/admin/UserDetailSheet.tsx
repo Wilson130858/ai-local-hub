@@ -22,9 +22,10 @@ type Props = {
   userName: string | null;
   credits: number;
   status: string;
+  defaultTab?: "summary" | "billing";
 };
 
-export function UserDetailSheet({ open, onOpenChange, userId, userName, credits, status }: Props) {
+export function UserDetailSheet({ open, onOpenChange, userId, userName, credits, status, defaultTab = "summary" }: Props) {
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [tenantName, setTenantName] = useState<string>("");
   const [billingDay, setBillingDay] = useState<number>(5);
@@ -81,7 +82,7 @@ export function UserDetailSheet({ open, onOpenChange, userId, userName, credits,
           <SheetTitle>{userName ?? "Cliente"}</SheetTitle>
           <SheetDescription>Perfil e gestão de faturamento</SheetDescription>
         </SheetHeader>
-        <Tabs defaultValue="summary" className="mt-6">
+        <Tabs defaultValue={defaultTab} key={`${userId}-${defaultTab}`} className="mt-6">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="summary">Resumo</TabsTrigger>
             <TabsTrigger value="billing">Faturamento</TabsTrigger>
