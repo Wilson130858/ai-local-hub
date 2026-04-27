@@ -416,6 +416,7 @@ export type Database = {
           billing_day: number
           business_name: string
           created_at: string
+          dashboard_config: Json
           google_calendar_token: string | null
           id: string
           owner_id: string
@@ -426,6 +427,7 @@ export type Database = {
           billing_day?: number
           business_name: string
           created_at?: string
+          dashboard_config?: Json
           google_calendar_token?: string | null
           id?: string
           owner_id: string
@@ -436,6 +438,7 @@ export type Database = {
           billing_day?: number
           business_name?: string
           created_at?: string
+          dashboard_config?: Json
           google_calendar_token?: string | null
           id?: string
           owner_id?: string
