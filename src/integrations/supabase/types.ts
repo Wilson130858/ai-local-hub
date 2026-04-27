@@ -35,6 +35,54 @@ export type Database = {
         }
         Relationships: []
       }
+      appointments: {
+        Row: {
+          created_at: string
+          customer_name: string
+          customer_phone: string | null
+          description: string | null
+          end_at: string
+          google_event_id: string | null
+          id: string
+          source: Database["public"]["Enums"]["appointment_source"]
+          start_at: string
+          status: Database["public"]["Enums"]["appointment_status"]
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_name: string
+          customer_phone?: string | null
+          description?: string | null
+          end_at: string
+          google_event_id?: string | null
+          id?: string
+          source?: Database["public"]["Enums"]["appointment_source"]
+          start_at: string
+          status?: Database["public"]["Enums"]["appointment_status"]
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_name?: string
+          customer_phone?: string | null
+          description?: string | null
+          end_at?: string
+          google_event_id?: string | null
+          id?: string
+          source?: Database["public"]["Enums"]["appointment_source"]
+          start_at?: string
+          status?: Database["public"]["Enums"]["appointment_status"]
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -417,7 +465,12 @@ export type Database = {
           business_name: string
           created_at: string
           dashboard_config: Json
+          google_access_token: string | null
+          google_calendar_id: string | null
           google_calendar_token: string | null
+          google_email: string | null
+          google_refresh_token: string | null
+          google_token_expires_at: string | null
           id: string
           owner_id: string
           updated_at: string
@@ -428,7 +481,12 @@ export type Database = {
           business_name: string
           created_at?: string
           dashboard_config?: Json
+          google_access_token?: string | null
+          google_calendar_id?: string | null
           google_calendar_token?: string | null
+          google_email?: string | null
+          google_refresh_token?: string | null
+          google_token_expires_at?: string | null
           id?: string
           owner_id: string
           updated_at?: string
@@ -439,7 +497,12 @@ export type Database = {
           business_name?: string
           created_at?: string
           dashboard_config?: Json
+          google_access_token?: string | null
+          google_calendar_id?: string | null
           google_calendar_token?: string | null
+          google_email?: string | null
+          google_refresh_token?: string | null
+          google_token_expires_at?: string | null
           id?: string
           owner_id?: string
           updated_at?: string
@@ -529,6 +592,8 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      appointment_source: "panel" | "whatsapp" | "google"
+      appointment_status: "scheduled" | "confirmed" | "cancelled" | "completed"
       business_category: "barbearia" | "clinica" | "petshop"
       invoice_item_kind: "base" | "quote_recurring" | "quote_lifetime"
       invoice_status: "open" | "closed" | "paid"
@@ -665,6 +730,8 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      appointment_source: ["panel", "whatsapp", "google"],
+      appointment_status: ["scheduled", "confirmed", "cancelled", "completed"],
       business_category: ["barbearia", "clinica", "petshop"],
       invoice_item_kind: ["base", "quote_recurring", "quote_lifetime"],
       invoice_status: ["open", "closed", "paid"],
