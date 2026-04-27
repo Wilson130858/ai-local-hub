@@ -17,38 +17,69 @@ export function AIPlayground({ tenantId, draftConfig }: Props) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [buffering, setBuffering] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const bufferTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRef = useRef<Msg[]>([]);
+
+  const BUFFER_MS = 8000;
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, loading]);
+  }, [messages, loading, buffering]);
 
-  const send = async () => {
-    const text = input.trim();
-    if (!text || loading) return;
-    if (!tenantId) {
-      toast.error("Configure seu negócio antes de testar.");
-      return;
+  useEffect(() => {
+    return () => {
+      if (bufferTimer.current) clearTimeout(bufferTimer.current);
+    };
+  }, []);
+
+  const flush = async () => {
+    if (bufferTimer.current) {
+      clearTimeout(bufferTimer.current);
+      bufferTimer.current = null;
     }
-    const next = [...messages, { role: "user" as const, content: text }];
-    setMessages(next);
-    setInput("");
+    const pending = pendingRef.current;
+    pendingRef.current = [];
+    setBuffering(false);
+    if (!pending.length || !tenantId) return;
+
+    const convo = [...messages, ...pending];
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("ai-playground", {
-        body: { tenant_id: tenantId, messages: next, draft_config: draftConfig },
+        body: { tenant_id: tenantId, messages: convo, draft_config: draftConfig },
       });
       if (error) throw error;
       const result = data as { reply?: string; error?: string };
       if (result.error === "rate_limited") return toast.error("Muitas mensagens. Aguarde alguns segundos.");
       if (result.error === "credits_exhausted") return toast.error("Créditos de IA esgotados.");
       if (!result.reply) return toast.error("Sem resposta da IA.");
-      setMessages([...next, { role: "assistant", content: result.reply }]);
+      setMessages([...convo, { role: "assistant", content: result.reply }]);
     } catch (e) {
       toast.error("Falha ao consultar a IA.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const send = () => {
+    const text = input.trim();
+    if (!text || loading) return;
+    if (!tenantId) {
+      toast.error("Configure seu negócio antes de testar.");
+      return;
+    }
+    const userMsg: Msg = { role: "user", content: text };
+    pendingRef.current = [...pendingRef.current, userMsg];
+    setMessages((prev) => [...prev, userMsg]);
+    setInput("");
+    setBuffering(true);
+
+    if (bufferTimer.current) clearTimeout(bufferTimer.current);
+    bufferTimer.current = setTimeout(() => {
+      flush();
+    }, BUFFER_MS);
   };
 
   return (
@@ -64,8 +95,14 @@ export function AIPlayground({ tenantId, draftConfig }: Props) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setMessages([])}
-          disabled={loading || messages.length === 0}
+          onClick={() => {
+            if (bufferTimer.current) clearTimeout(bufferTimer.current);
+            bufferTimer.current = null;
+            pendingRef.current = [];
+            setBuffering(false);
+            setMessages([]);
+          }}
+          disabled={loading || (messages.length === 0 && !buffering)}
           className="h-8 gap-1.5 text-xs"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -103,6 +140,11 @@ export function AIPlayground({ tenantId, draftConfig }: Props) {
               )}
             </div>
           ))}
+          {buffering && !loading && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Aguardando novas mensagens (8s)...
+            </div>
+          )}
           {loading && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" /> Assistente digitando...
