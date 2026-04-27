@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { Bot, Send, User as UserIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -64,7 +63,7 @@ export function AIPlayground({ tenantId, draftConfig }: Props) {
         </div>
       </div>
 
-      <ScrollArea className="flex-1 bg-[hsl(var(--muted))]/30" viewportRef={scrollRef}>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto bg-[hsl(var(--muted))]/30">
         <div className="flex flex-col gap-3 p-4">
           {messages.length === 0 && (
             <p className="mt-8 text-center text-xs text-muted-foreground">
@@ -100,7 +99,7 @@ export function AIPlayground({ tenantId, draftConfig }: Props) {
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       <div className="border-t border-border bg-background p-3">
         <div className="flex items-center gap-2">
