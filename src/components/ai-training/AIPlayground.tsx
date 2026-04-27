@@ -95,8 +95,14 @@ export function AIPlayground({ tenantId, draftConfig }: Props) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setMessages([])}
-          disabled={loading || messages.length === 0}
+          onClick={() => {
+            if (bufferTimer.current) clearTimeout(bufferTimer.current);
+            bufferTimer.current = null;
+            pendingRef.current = [];
+            setBuffering(false);
+            setMessages([]);
+          }}
+          disabled={loading || (messages.length === 0 && !buffering)}
           className="h-8 gap-1.5 text-xs"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -134,6 +140,11 @@ export function AIPlayground({ tenantId, draftConfig }: Props) {
               )}
             </div>
           ))}
+          {buffering && !loading && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Aguardando novas mensagens (8s)...
+            </div>
+          )}
           {loading && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" /> Assistente digitando...
