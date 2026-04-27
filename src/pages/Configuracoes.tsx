@@ -5,7 +5,6 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,18 +17,11 @@ import { formatCredits } from "@/lib/utils";
 import { CurrentInvoiceCard } from "@/components/billing/CurrentInvoiceCard";
 import { PendingQuoteCard } from "@/components/billing/PendingQuoteCard";
 import type { ServiceQuote } from "@/lib/billing";
-
-const defaultPrompt = `Você é o atendente virtual da Barbearia Vintage Petrolina.
-- Horário: Seg a Sáb, 9h às 19h.
-- Serviços: Corte (R$40), Barba (R$30), Corte+Barba (R$60), Pezinho (R$15).
-- Endereço: Av. Souza Filho, 1234 - Centro, Petrolina/PE.
-- Sempre confirme nome do cliente, serviço desejado e horário.
-- Seja cordial, use linguagem informal e emojis com moderação.`;
+import { AITrainingPanel } from "@/components/ai-training/AITrainingPanel";
 
 const Configuracoes = () => {
   const { theme, toggle } = useTheme();
   const { user, isAdmin, signOut } = useAuth();
-  const [prompt, setPrompt] = useState(defaultPrompt);
   const [credits, setCredits] = useState(0);
   const [voucherCode, setVoucherCode] = useState("");
   const [redeeming, setRedeeming] = useState(false);
@@ -215,20 +207,7 @@ const Configuracoes = () => {
 
         {isClient && (
           <TabsContent value="ia" className="mt-6">
-            <Card className="border-border/60 p-6 shadow-soft">
-              <div className="mb-4 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-accent" />
-                <h3 className="text-base font-semibold">Manual de instruções do bot</h3>
-              </div>
-              <p className="mb-4 text-sm text-muted-foreground">
-                Personalize como sua IA atende clientes. Inclua serviços, preços, horários e tom de voz.
-              </p>
-              <Textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={14} className="resize-none font-mono text-sm" />
-              <div className="mt-4 flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setPrompt(defaultPrompt)}>Restaurar</Button>
-                <Button onClick={() => toast.success("Treinamento salvo! A IA será atualizada em ~30s.")}>Salvar treinamento</Button>
-              </div>
-            </Card>
+            <AITrainingPanel />
           </TabsContent>
         )}
 
