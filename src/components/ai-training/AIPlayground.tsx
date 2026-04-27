@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import { Bot, Send, User as UserIcon, Loader2 } from "lucide-react";
+import { Bot, Send, User as UserIcon, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 type Msg = { role: "user" | "assistant"; content: string };
@@ -57,10 +57,20 @@ export function AIPlayground({ tenantId, draftConfig }: Props) {
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
           <Bot className="h-4 w-4 text-primary" />
         </div>
-        <div>
+        <div className="flex-1">
           <p className="text-sm font-semibold">Testar Assistente</p>
           <p className="text-[11px] text-muted-foreground">Simula como a IA responderá no WhatsApp.</p>
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setMessages([])}
+          disabled={loading || messages.length === 0}
+          className="h-8 gap-1.5 text-xs"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Limpar
+        </Button>
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto bg-[hsl(var(--muted))]/30">
