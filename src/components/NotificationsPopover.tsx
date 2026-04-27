@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, ArrowLeft, Inbox } from "lucide-react";
+import { Bell, ArrowLeft, Inbox, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -65,6 +65,25 @@ export function NotificationsPopover() {
     setItems((prev) => prev.map((x) => ({ ...x, is_read: true })));
   };
 
+  const deleteOne = async (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    e?.preventDefault();
+    const prev = items;
+    setItems((p) => p.filter((x) => x.id !== id));
+    if (selected?.id === id) setSelected(null);
+    const { error } = await supabase.from("notifications").delete().eq("id", id);
+    if (error) setItems(prev);
+  };
+
+  const deleteAll = async () => {
+    if (!user || items.length === 0) return;
+    const prev = items;
+    setItems([]);
+    setSelected(null);
+    const { error } = await supabase.from("notifications").delete().eq("target_user_id", user.id);
+    if (error) setItems(prev);
+  };
+
   return (
     <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSelected(null); }}>
       <PopoverTrigger asChild>
@@ -91,6 +110,15 @@ export function NotificationsPopover() {
                   {formatDistanceToNow(new Date(selected.created_at), { addSuffix: true, locale: ptBR })}
                 </p>
               </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                onClick={() => deleteOne(selected.id)}
+                aria-label="Excluir notificação"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
             <ScrollArea className="h-[360px]">
               <div className="p-4 text-sm leading-relaxed whitespace-pre-wrap break-words">
@@ -107,11 +135,23 @@ export function NotificationsPopover() {
                   <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{unreadCount}</Badge>
                 )}
               </div>
-              {unreadCount > 0 && (
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={markAllRead}>
-                  Marcar todas como lidas
-                </Button>
-              )}
+              <div className="flex items-center gap-1">
+                {unreadCount > 0 && (
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={markAllRead}>
+                    Marcar todas como lidas
+                  </Button>
+                )}
+                {items.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                    onClick={deleteAll}
+                  >
+                    Limpar
+                  </Button>
+                )}
+              </div>
             </div>
             <ScrollArea className="h-[420px]">
               {items.length === 0 ? (
@@ -123,25 +163,36 @@ export function NotificationsPopover() {
                 <ul className="divide-y divide-border">
                   {items.map((n) => (
                     <li key={n.id}>
-                      <button
-                        onClick={() => openItem(n)}
-                        className="flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-muted/50"
-                      >
-                        <span className="mt-1.5 flex h-2 w-2 shrink-0">
-                          {!n.is_read && <span className="h-2 w-2 rounded-full bg-destructive" />}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className={`truncate text-sm ${n.is_read ? "text-muted-foreground" : "font-medium"}`}>
-                            {n.title || n.message}
-                          </p>
-                          {n.title && (
-                            <p className="line-clamp-2 text-xs text-muted-foreground">{n.message}</p>
-                          )}
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">
-                            {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: ptBR })}
-                          </p>
-                        </div>
-                      </button>
+                      <div className="group relative flex items-start transition-colors hover:bg-muted/50">
+                        <button
+                          onClick={() => openItem(n)}
+                          className="flex flex-1 items-start gap-3 px-3 py-3 pr-10 text-left"
+                        >
+                          <span className="mt-1.5 flex h-2 w-2 shrink-0">
+                            {!n.is_read && <span className="h-2 w-2 rounded-full bg-destructive" />}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className={`truncate text-sm ${n.is_read ? "text-muted-foreground" : "font-medium"}`}>
+                              {n.title || n.message}
+                            </p>
+                            {n.title && (
+                              <p className="line-clamp-2 text-xs text-muted-foreground">{n.message}</p>
+                            )}
+                            <p className="mt-0.5 text-[11px] text-muted-foreground">
+                              {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: ptBR })}
+                            </p>
+                          </div>
+                        </button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-2 top-2 h-7 w-7 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus:opacity-100"
+                          onClick={(e) => deleteOne(n.id, e)}
+                          aria-label="Excluir notificação"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </li>
                   ))}
                 </ul>
