@@ -73,7 +73,8 @@ export function AITrainingPanel() {
     setSaving(true);
     const { error } = await supabase
       .from("tenants")
-      .update({ ai_config: config as unknown as Record<string, unknown> })
+      // ai_config é jsonb; passamos o objeto como qualquer para satisfazer o tipo gerado.
+      .update({ ai_config: config as unknown as never })
       .eq("id", tenantId);
     setSaving(false);
     if (error) return toast.error("Erro ao salvar: " + error.message);
