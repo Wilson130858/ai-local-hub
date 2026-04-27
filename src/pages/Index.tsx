@@ -1,55 +1,66 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { MetricCard } from "@/components/MetricCard";
 import { PerformanceChart } from "@/components/PerformanceChart";
 import { BotStatus } from "@/components/BotStatus";
 import { AIInsights } from "@/components/AIInsights";
-import { metrics } from "@/lib/mock-data";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { LayoutGrid } from "lucide-react";
+import { Settings } from "lucide-react";
 import { toast } from "sonner";
-
-type WidgetKey = "metrics" | "performance" | "bot" | "insights";
-const DEFAULT_WIDGETS: Record<WidgetKey, boolean> = {
-  metrics: true,
-  performance: true,
-  bot: true,
-  insights: true,
-};
-const WIDGET_LABELS: Record<WidgetKey, string> = {
-  metrics: "Métricas",
-  performance: "Gráfico de desempenho",
-  bot: "Status do bot",
-  insights: "Insights de IA",
-};
+import { CustomizeSheet } from "@/components/dashboard/CustomizeSheet";
+import { MetricsGrid } from "@/components/dashboard/MetricsGrid";
+import { EmptyDashboard } from "@/components/dashboard/EmptyDashboard";
+import { DEFAULT_SELECTED } from "@/lib/dashboard-metrics";
 
 const Index = () => {
   const { user } = useAuth();
-  const [widgets, setWidgets] = useState<Record<WidgetKey, boolean>>(DEFAULT_WIDGETS);
+  const [tenantId, setTenantId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>(DEFAULT_SELECTED);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const loadedRef = useRef(false);
+  const saveTimer = useRef<number | null>(null);
 
+  // Load tenant + dashboard_config
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data } = await supabase.from("profiles").select("dashboard_widgets").eq("id", user.id).maybeSingle();
-      const stored = (data?.dashboard_widgets ?? null) as Partial<Record<WidgetKey, boolean>> | null;
-      if (stored && typeof stored === "object") {
-        setWidgets({ ...DEFAULT_WIDGETS, ...stored });
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("id, dashboard_config")
+        .eq("owner_id", user.id)
+        .maybeSingle();
+      if (error) {
+        console.error(error);
+        loadedRef.current = true;
+        return;
       }
+      if (data) {
+        setTenantId(data.id);
+        const cfg = data.dashboard_config as { metrics?: string[] } | null;
+        if (cfg && Array.isArray(cfg.metrics)) {
+          setSelected(cfg.metrics);
+        }
+      }
+      loadedRef.current = true;
     })();
   }, [user]);
 
-  const toggle = async (key: WidgetKey, value: boolean) => {
-    const next = { ...widgets, [key]: value };
-    setWidgets(next);
-    if (!user) return;
-    const { error } = await supabase.from("profiles").update({ dashboard_widgets: next }).eq("id", user.id);
-    if (error) toast.error("Não foi possível salvar a preferência");
-  };
+  // Persist with debounce when selection changes
+  useEffect(() => {
+    if (!loadedRef.current || !tenantId) return;
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(async () => {
+      const { error } = await supabase
+        .from("tenants")
+        .update({ dashboard_config: { metrics: selected } })
+        .eq("id", tenantId);
+      if (error) toast.error("Não foi possível salvar suas preferências");
+    }, 400);
+    return () => {
+      if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    };
+  }, [selected, tenantId]);
 
   return (
     <DashboardLayout title="Visão Geral">
@@ -58,46 +69,32 @@ const Index = () => {
           <h2 className="text-2xl font-semibold tracking-tight">Bom dia, Vinícius 👋</h2>
           <p className="text-sm text-muted-foreground">Aqui está o resumo da sua barbearia hoje.</p>
         </div>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <LayoutGrid className="h-4 w-4" /> Personalizar
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-64 space-y-3">
-            <p className="text-sm font-medium">Widgets visíveis</p>
-            {(Object.keys(WIDGET_LABELS) as WidgetKey[]).map((k) => (
-              <div key={k} className="flex items-center justify-between gap-2">
-                <Label htmlFor={`w-${k}`} className="cursor-pointer text-sm font-normal">
-                  {WIDGET_LABELS[k]}
-                </Label>
-                <Switch id={`w-${k}`} checked={widgets[k]} onCheckedChange={(v) => toggle(k, v)} />
-              </div>
-            ))}
-          </PopoverContent>
-        </Popover>
+        <Button variant="outline" size="sm" className="gap-2" onClick={() => setSheetOpen(true)}>
+          <Settings className="h-4 w-4" /> Personalizar Painel
+        </Button>
       </div>
 
-      {widgets.metrics && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {metrics.map((m) => (
-            <MetricCard key={m.label} {...m} />
-          ))}
-        </div>
+      {selected.length === 0 ? (
+        <EmptyDashboard onCustomize={() => setSheetOpen(true)} />
+      ) : (
+        <MetricsGrid selected={selected} />
       )}
 
-      {(widgets.performance || widgets.bot) && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          {widgets.performance && (
-            <div className={widgets.bot ? "lg:col-span-2" : "lg:col-span-3"}>
-              <PerformanceChart />
-            </div>
-          )}
-          {widgets.bot && <BotStatus />}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <PerformanceChart />
         </div>
-      )}
+        <BotStatus />
+      </div>
 
-      {widgets.insights && <AIInsights />}
+      <AIInsights />
+
+      <CustomizeSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        selected={selected}
+        onChange={setSelected}
+      />
     </DashboardLayout>
   );
 };
